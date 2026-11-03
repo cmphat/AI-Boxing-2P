@@ -1,117 +1,48 @@
-# AI BOXING - 2 PLAYERS (OpenCV + MediaPipe Pose + Pygame)
+# AI-Boxing-2P
 
-Game boxing 2D cho mon Xu ly anh. Hai nguoi dung truoc mot webcam:
-- Player 1 dung o nua trai khung hinh.
-- Player 2 dung o nua phai khung hinh.
-- Dua tay ra truoc de thuc hien punch.
-- Dua ca hai tay len cao de guard/block.
-- Phim A va L co the dung de kiem tra game khi chua can webcam.
+Game boxing 2D cho hai nguoi choi, dieu khien bang cu dong qua webcam, su dung OpenCV, MediaPipe Pose Landmarker va Pygame.
 
-## 1. Yeu cau
+## Source code
+
+Toan bo source code goc duoc dong goi trong file **AI_Boxing_2P_Windows.zip** tai repository nay. Giai nen file ZIP de lay thu muc `AI_Boxing_2P/` gom:
+
+- `main.py` — webcam, xu ly frame va game loop.
+- `pose_tracker.py` — MediaPipe Pose, gan nguoi choi va nhan dien punch/guard.
+- `boxing_game.py` — giao dien, thanh mau, thoi gian va logic tran dau.
+- `download_model.py` — tai model Pose Landmarker Lite.
+- `requirements.txt` — cac thu vien Python.
+- `setup.bat` — tao virtual environment, cai thu vien va tai model.
+- `run.bat` — khoi dong game.
+- `README.md` — huong dan su dung trong goi source.
+
+## Yeu cau
 
 - Windows 10/11 64-bit.
-- Python 3.11 64-bit.
-- Webcam co the nhin thay ca hai nguoi.
-- Internet trong lan cai dat dau tien de tai thu vien va model MediaPipe.
+- Python 3.11 64-bit va da chon **Add Python to PATH** khi cai dat.
+- Webcam nhin thay ca hai nguoi choi.
+- Ket noi Internet trong lan cai dat dau tien.
 
-Tai Python 3.11 tai: https://www.python.org/downloads/
-Khi cai Python, tick **Add Python to PATH**.
+## Cai dat va chay
 
-## 2. Cai dat
+1. Tai `AI_Boxing_2P_Windows.zip` tu repository va giai nen.
+2. Mo thu muc `AI_Boxing_2P`.
+3. Chay `setup.bat` va cho qua trinh cai dat hoan tat.
+4. Chay `run.bat` de mo game.
 
-1. Giai nen thu muc AI_Boxing_2P.
-2. Mo thu muc vua giai nen.
-3. Nhan dup setup.bat.
-4. Cho den khi cai xong MediaPipe, Pygame va model Pose Landmarker.
+## Cach choi
 
-Neu Windows hoi Firewall/camera permission, cho phep ung dung Python truy cap webcam.
+- Player 1 dung ben trai khung hinh; Player 2 dung ben phai.
+- Dua mot tay ra truoc nhanh de punch.
+- Dua ca hai co tay len cao gan/vuot vai de guard.
+- `A`: test punch Player 1; `L`: test punch Player 2.
+- `R`: restart; `ESC`: thoat.
 
-## 3. Chay game
+## Luu y ky thuat
 
-Nhan dup run.bat.
+Nhan dien punch hien tai la heuristic dua tren goc khuyu tay, toc do co tay va co che re-arm/cooldown; day khong phai classifier boxing da duoc huan luyen. Ket qua phu thuoc vao anh sang, goc webcam, khoang cach va kha nang nhin thay landmark.
 
-Hoac mo CMD tai thu muc project va chay:
+Model `pose_landmarker_lite.task` duoc tai tu dong boi `setup.bat`/`download_model.py`, khong can commit model vao repository.
 
-~~~bat
-.venv\Scripts\python.exe main.py
-~~~
+## An toan
 
-## 4. Cach choi
-
-1. Dat webcam ngang tam nguc, cach hai nguoi khoang 2-3 met (tuy goc camera).
-2. Hai nguoi dung canh nhau, khong che khuoc nhau:
-   - Player 1 ben trai.
-   - Player 2 ben phai.
-3. Dam bao webcam thay ro vai, khuyu tay va co tay cua ca hai nguoi.
-4. Dua mot tay ra truoc nhanh va duoi khuyu tay de tao punch.
-5. Dua ca hai tay len cao de guard/block.
-6. Nhan R de choi lai; ESC de thoat.
-
-Phim test:
-- A: Player 1 punch.
-- L: Player 2 punch.
-- R: restart.
-- ESC: quit.
-
-## 5. Cau truc source code
-
-~~~text
-AI_Boxing_2P/
-|-- main.py
-|-- pose_tracker.py
-|-- boxing_game.py
-|-- download_model.py
-|-- requirements.txt
-|-- setup.bat
-|-- run.bat
-|-- README.md
-|-- assets/
-    |-- pose_landmarker_lite.task  # Tu dong tai khi setup
-~~~
-
-## 6. Nguyen ly xu ly anh
-
-1. OpenCV lay tung frame tu webcam va lat ngang de tao hinh anh nhu guong.
-2. MediaPipe Pose Landmarker phat hien toi da 2 bo landmark trong cung frame.
-3. Moi nguoi duoc gan theo vi tri ngang: trai = Player 1, phai = Player 2.
-4. He thong theo doi landmark vai, khuyu tay va co tay.
-5. Goc khuyu tay va toc do thay doi vi tri co tay duoc dung lam heuristic nhan dien punch.
-6. Khi hai co tay duoc dua len cao, game nhan dien guard.
-7. Pygame nhan su kien va cap nhat mau, hieu ung, thoi gian va ket qua.
-
-## 7. Tinh chinh do nhay
-
-Mo pose_tracker.py, tim doan dieu kien:
-- elbow_angle > 148.0
-- speed > 0.45
-
-Giam speed neu phai dam rat manh moi nhan. Tang speed neu game tu nhan nham khi dang di chuyen tay thong thuong. Giam elbow_angle neu camera/goc dung khien khuyu tay khong duoc duoi gan thang.
-
-Day la nguong heuristic ban dau, khong phai mo hinh phan loai boxing da duoc huan luyen. Hieu nang phu thuoc webcam, anh sang, khoang cach va tu the.
-
-## 8. Loi thuong gap
-
-### Khong mo duoc webcam
-- Dong Zoom, Teams, OBS va ung dung Camera dang dung webcam.
-- Trong main.py, doi CAMERA_INDEX = 0 thanh 1 neu webcam la camera thu hai.
-
-### Khong tim thay model
-Chay:
-~~~bat
-.venv\Scripts\python.exe download_model.py
-~~~
-
-### Loi import mediapipe / DLL
-- Dung Python 3.11 64-bit.
-- Chay lai setup.bat.
-- Neu van loi, cai Microsoft Visual C++ Redistributable x64.
-
-### Chi nhan dien duoc mot nguoi
-- Hai nguoi can dung cach nhau, khong bi che khuat.
-- Tang anh sang.
-- Dam bao ca hai than tren va hai canh tay nam trong khung hinh.
-- Pose Landmarker duoc cau hinh num_poses=2; tuy nhien chat luong nhan dien van phu thuoc model va camera.
-
-## 9. Luu y an toan
-
-Day la game dieu khien bang cu dong, khong phai bai tap boxing that. Khong dam vao nguoi choi khac, giu khoang trong xung quanh va dung lai neu thay dau, chong mat hoac met.
+Day la game dieu khien bang cu dong, khong phai bai tap boxing that. Giu khoang cach an toan, khong dam vao nguoi choi khac va dung lai neu thay dau hoac met.
