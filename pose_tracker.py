@@ -88,14 +88,14 @@ class PoseTracker:
         detected.sort(key=lambda item: item["center_x"])
         people = [None, None]
 
-        if len(detected) >= 2:
+        if single_player and detected:
+            # In PVE, select the person closest to the center of the camera view.
+            people[0] = min(detected, key=lambda item: abs(item["center_x"] - 0.5))
+        elif len(detected) >= 2:
             people[0], people[1] = detected[0], detected[1]
         elif len(detected) == 1:
-            if single_player:
-                people[0] = detected[0]
-            else:
-                slot = 0 if detected[0]["center_x"] < 0.5 else 1
-                people[slot] = detected[0]
+            slot = 0 if detected[0]["center_x"] < 0.5 else 1
+            people[slot] = detected[0]
 
         gestures = [
             {"punch": False, "guard": False, "tracked": False},
