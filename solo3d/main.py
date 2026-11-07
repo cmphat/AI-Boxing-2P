@@ -39,7 +39,16 @@ def main():
     pygame.init()
     pygame.display.gl_set_attribute(pygame.GL_DEPTH_SIZE,24)
     pygame.display.gl_set_attribute(pygame.GL_DOUBLEBUFFER,1)
-    pygame.display.set_mode((1280,720),pygame.OPENGL|pygame.DOUBLEBUF)
+    # Multisampling reduces visible jagged edges on gloves and arena.
+    # Fall back automatically on Windows drivers that do not support MSAA.
+    try:
+        pygame.display.gl_set_attribute(pygame.GL_MULTISAMPLEBUFFERS,1)
+        pygame.display.gl_set_attribute(pygame.GL_MULTISAMPLESAMPLES,4)
+        pygame.display.set_mode((1280,720),pygame.OPENGL|pygame.DOUBLEBUF)
+    except pygame.error:
+        pygame.display.gl_set_attribute(pygame.GL_MULTISAMPLEBUFFERS,0)
+        pygame.display.gl_set_attribute(pygame.GL_MULTISAMPLESAMPLES,0)
+        pygame.display.set_mode((1280,720),pygame.OPENGL|pygame.DOUBLEBUF)
     pygame.display.set_caption("AI Boxing | Solo 3D | Head Dodge")
     worker=None
     scene=None
