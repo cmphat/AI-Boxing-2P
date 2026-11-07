@@ -1,7 +1,7 @@
 name: Solo 3D tests
 on:
   push:
-    branches: [main, feature/solo-3d-movement, feature/head-dodge-smooth-camera]
+    branches: [main, feature/rebuild-tracking-v2]
   pull_request:
 jobs:
   syntax-and-gameplay:
@@ -17,3 +17,5 @@ jobs:
         run: python -m unittest discover -s tests -p 'test_solo3d.py' -v
       - name: Head dodge and camera smoothing tests
         run: python -m unittest discover -s tests -p 'test_head_dodge.py' -v
+      - name: Test actual camera-to-XZ synthetic motion and occlusion
+        run: python -m unittest discover -s tests -p 'test_tracking_v2.py' -v
