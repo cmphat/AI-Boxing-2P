@@ -14,6 +14,7 @@ import numpy as np
 
 from .motion import HeadController, head_measure, smooth_value, deadband
 from .tracking import RelativeMovement, body_measure
+from .hands import pose_hands, flip_world_controls
 
 MODEL = Path(__file__).resolve().parents[1] / "assets" / "pose_landmarker_lite.task"
 FULL_MODEL = MODEL.with_name("pose_landmarker_full.task")
@@ -82,7 +83,7 @@ class SoloPose:
                  "landmarks":None,"vis":None,"depth_ratio":1.0,"shoulder_px":0.,
                  "fist_speed":0.0,"head_roll":0.0,"head_offset":0.0,
                  "calibration":0,"center":.5,"scale":0.,"baseline_scale":0.,
-                 "model":self.model_name}
+                 "model":self.model_name,"hands":{"left":None,"right":None}}
         if not result.pose_landmarks:
             self.previous_wrist=[None,None]
             control.update(self.movement.update(None,dt))
@@ -100,6 +101,7 @@ class SoloPose:
             control["head_roll"],control["head_offset"]=self.head.update(None,dt)
             return control
         control["confidence"]=float(measure[2])
+        control["hands"]=pose_hands(pts,vis)
         control["shoulder_px"]=float(abs(pts[11,0]-pts[12,0])*bgr.shape[1])
         control["depth_ratio"]=(
             control["scale"]/max(.04,control["baseline_scale"])
@@ -134,7 +136,9 @@ class SoloPose:
                 self.rearmed[a]=False
                 self.last_fire[a]=now
             self.previous_wrist[a]=wrist
-        return control
+        # Preserve anatomical L/R from ORIGINAL, unflipped camera input.
+        # Convert front-camera horizontal controls to player viewpoint.
+        return flip_world_controls(control)
 
 
 # Full 33-point MediaPipe skeleton (not upper body only).
