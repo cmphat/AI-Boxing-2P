@@ -104,7 +104,7 @@ class PoseWorker:
                 now=time.monotonic()
                 mini=None
                 if now-last_preview>.095:
-                    mini=cv2.flip(draw_overlay(frame,control),1)
+                    mini=draw_overlay(frame,control,mirrored=True)
                     last_preview=now
                 with self.lock:
                     self.latest=(control,now)
