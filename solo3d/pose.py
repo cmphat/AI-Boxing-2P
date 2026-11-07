@@ -16,6 +16,7 @@ from .motion import HeadController, head_measure, smooth_value, deadband
 from .tracking import RelativeMovement, body_measure
 
 MODEL = Path(__file__).resolve().parents[1] / "assets" / "pose_landmarker_lite.task"
+FULL_MODEL = MODEL.with_name("pose_landmarker_full.task")
 
 
 def clamp(v, lo, hi):
@@ -29,11 +30,16 @@ def joint_angle(a, b, c):
 
 
 class SoloPose:
-    def __init__(self, sensitivity=1.2):
-        if not MODEL.is_file():
+    def __init__(self, sensitivity=1.2, model="auto"):
+        model_path = FULL_MODEL if model in ("auto", "full") and FULL_MODEL.is_file() else MODEL
+        if model == "full" and not FULL_MODEL.is_file():
+            raise FileNotFoundError("Full pose model missing. Run download_full_model.py")
+        if not model_path.is_file():
             raise FileNotFoundError("Missing MediaPipe model. Run setup_3d.bat first.")
+        self.model_name="full" if model_path==FULL_MODEL else "lite"
+        print("[POSE] Loaded MediaPipe model:",self.model_name,flush=True)
         opts = mp.tasks.vision.PoseLandmarkerOptions(
-            base_options=mp.tasks.BaseOptions(model_asset_path=str(MODEL)),
+            base_options=mp.tasks.BaseOptions(model_asset_path=str(model_path)),
             running_mode=mp.tasks.vision.RunningMode.VIDEO,
             num_poses=1, min_pose_detection_confidence=.50,
             min_pose_presence_confidence=.50, min_tracking_confidence=.50,
@@ -75,7 +81,8 @@ class SoloPose:
                  "x":0.,"z":2.75,"guard":False,"punch":None,"confidence":0.,
                  "landmarks":None,"vis":None,"depth_ratio":1.0,"shoulder_px":0.,
                  "fist_speed":0.0,"head_roll":0.0,"head_offset":0.0,
-                 "calibration":0,"center":.5,"scale":0.,"baseline_scale":0.}
+                 "calibration":0,"center":.5,"scale":0.,"baseline_scale":0.,
+                 "model":self.model_name}
         if not result.pose_landmarks:
             self.previous_wrist=[None,None]
             control.update(self.movement.update(None,dt))
