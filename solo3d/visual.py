@@ -23,6 +23,10 @@ class SoloScene(Scene):
         self.animation_t=0.
         self.camera_head_x=0.0
         self.camera_roll=0.0
+        # Allocate the HUD texture once; updates avoid re-allocating each frame.
+        glBindTexture(GL_TEXTURE_2D,self.hud_texture)
+        glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA,self.width,self.height,
+                     0,GL_RGBA,GL_UNSIGNED_BYTE,None)
         glLightfv(GL_LIGHT0, GL_POSITION, (2.5, 6.0, 2.5, 1.0))
         glLightfv(GL_LIGHT0, GL_DIFFUSE, (1.0, .98, .94, 1.0))
         glLightfv(GL_LIGHT0, GL_AMBIENT, (.36,.38,.43,1.0))
@@ -209,8 +213,8 @@ class SoloScene(Scene):
         glBlendFunc(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA)
         glEnable(GL_TEXTURE_2D)
         glBindTexture(GL_TEXTURE_2D,self.hud_texture)
-        glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA,self.width,self.height,0,GL_RGBA,GL_UNSIGNED_BYTE,
-                     pygame.image.tostring(h,"RGBA",True))
+        glTexSubImage2D(GL_TEXTURE_2D,0,0,0,self.width,self.height,
+                        GL_RGBA,GL_UNSIGNED_BYTE,pygame.image.tostring(h,"RGBA",True))
         glMatrixMode(GL_PROJECTION)
         glPushMatrix()
         glLoadIdentity()
