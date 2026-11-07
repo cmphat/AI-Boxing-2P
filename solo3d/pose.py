@@ -174,8 +174,8 @@ def draw_overlay(frame,control,mirrored=False):
             y=int(pts[i,1]*h)
             cv2.circle(out,(int(x),int(y)),4,(10,20,25),-1,cv2.LINE_AA)
             cv2.circle(out,(int(x),int(y)),2,(0,235,255),-1,cv2.LINE_AA)
-    dark=out[:99,:]
-    cv2.rectangle(dark,(0,0),(min(w-1,540),98),(12,18,24),-1)
+    dark=out[:124,:]
+    cv2.rectangle(dark,(0,0),(min(w-1,620),123),(12,18,24),-1)
     status="TRACKED" if control.get("tracked") else "NO POSE - SHOW SHOULDERS"
     if not control.get("calibrated"):
         status=f"CALIBRATING {control.get('calibration',0)}% - HOLD STILL"
@@ -185,4 +185,12 @@ def draw_overlay(frame,control,mirrored=False):
                 (10,49),cv2.FONT_HERSHEY_SIMPLEX,.56,(245,235,205),1,cv2.LINE_AA)
     cv2.putText(out,f"HEAD:{control.get('head_roll',0):+.0f}deg  QUALITY:{control.get('confidence',0):.2f}  LANDMARKS:33",
                 (10,76),cv2.FONT_HERSHEY_SIMPLEX,.54,(80,225,250),1,cv2.LINE_AA)
+    arms=control.get("arm_tracking",{})
+    if arms.get("left") and arms.get("right"):
+        arm_text="ARMS OK: BOTH ELBOWS + WRISTS VISIBLE"
+        arm_color=(65,245,135)
+    else:
+        arm_text="STEP BACK: SHOW BOTH ELBOWS + WRISTS"
+        arm_color=(0,185,255)
+    cv2.putText(out,arm_text,(10,105),cv2.FONT_HERSHEY_SIMPLEX,.50,arm_color,1,cv2.LINE_AA)
     return out
