@@ -1,7 +1,7 @@
 name: Solo 3D tests
 on:
   push:
-    branches: [main, feature/robot-shadow-mode]
+    branches: [main, feature/first-person-flexible-arms]
   pull_request:
 jobs:
   syntax-and-gameplay:
@@ -26,3 +26,5 @@ jobs:
         run: python -m unittest discover -s tests -p 'test_anatomical_hands.py' -v
       - name: Test full robot pose retargeting
         run: python -m unittest discover -s tests -p 'test_robot_shadow.py' -v
+      - name: Test first-person articulated arm tracking
+        run: python -m unittest discover -s tests -p 'test_first_person_arms.py' -v

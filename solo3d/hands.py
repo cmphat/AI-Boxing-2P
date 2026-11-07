@@ -52,3 +52,44 @@ def flip_world_controls(control):
         if k in c:
             c[k]=-float(c[k])
     return c
+
+
+def pose_arm_joints(points, visibility, minimum_visibility=.38):
+    """Return first-person local shoulder/elbow/wrist coordinates.
+
+    X is player's anatomical left/right (right positive), Y is vertical
+    relative to the camera eye, and forward is positive. Uses all three
+    landmarks per arm rather than moving a glove independently of its elbow.
+    """
+    if points is None or visibility is None:
+        return {}
+    sw=max(math.hypot(float(points[11][0]-points[12][0]),
+                      float(points[11][1]-points[12][1])),.085)
+    cx=(float(points[11][0])+float(points[12][0]))*.5
+    cy=(float(points[11][1])+float(points[12][1]))*.5
+    cz=(float(points[11][2])+float(points[12][2]))*.5
+    result={}
+    for name, ids in ARMS.items():
+        sh,el,wr=ids
+        if float(visibility[sh])<minimum_visibility:
+            continue
+        values={}
+        for joint,idx in zip(("shoulder","elbow","wrist"),ids):
+            if float(visibility[idx])<minimum_visibility:
+                continue
+            p=points[idx]
+            # Webcam is unmirrored. Anatomical right appears image-left,
+            # therefore invert image X for the player's first-person view.
+            x=-(float(p[0])-cx)/sw*.92
+            y=-(float(p[1])-cy)/sw*.88
+            forward=-(float(p[2])-cz)/sw*.52
+            values[joint]=(
+                clamp(x,-1.15,1.15),
+                clamp(y,-.85,.85),
+                clamp(forward,-.45,.90),
+            )
+        if "shoulder" in values:
+            # The shoulder anchor stays close to the torso, not the edge of
+            # the frame. It still follows the detected shoulder asymmetry.
+            result[name]=values
+    return result
