@@ -90,7 +90,8 @@ class PoseWorker:
                     if self.stop_flag.wait(.05):
                         break
                     continue
-                frame=cv2.flip(frame,1)
+                # Use original camera orientation for reliable anatomical hand labels.
+                # Mirror only the diagnostic preview AFTER inference.
                 ts=max(int(time.monotonic()*1000),last_ts+1)
                 last_ts=ts
                 with self.lock:
@@ -103,7 +104,7 @@ class PoseWorker:
                 now=time.monotonic()
                 mini=None
                 if now-last_preview>.095:
-                    mini=draw_overlay(frame,control)
+                    mini=draw_overlay(frame,control,mirrored=True)
                     last_preview=now
                 with self.lock:
                     self.latest=(control,now)

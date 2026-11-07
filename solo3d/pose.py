@@ -14,6 +14,7 @@ import numpy as np
 
 from .motion import HeadController, head_measure, smooth_value, deadband
 from .tracking import RelativeMovement, body_measure
+from .hands import pose_hands, flip_world_controls
 
 MODEL = Path(__file__).resolve().parents[1] / "assets" / "pose_landmarker_lite.task"
 FULL_MODEL = MODEL.with_name("pose_landmarker_full.task")
@@ -82,7 +83,7 @@ class SoloPose:
                  "landmarks":None,"vis":None,"depth_ratio":1.0,"shoulder_px":0.,
                  "fist_speed":0.0,"head_roll":0.0,"head_offset":0.0,
                  "calibration":0,"center":.5,"scale":0.,"baseline_scale":0.,
-                 "model":self.model_name}
+                 "model":self.model_name,"hands":{"left":None,"right":None}}
         if not result.pose_landmarks:
             self.previous_wrist=[None,None]
             control.update(self.movement.update(None,dt))
@@ -100,6 +101,7 @@ class SoloPose:
             control["head_roll"],control["head_offset"]=self.head.update(None,dt)
             return control
         control["confidence"]=float(measure[2])
+        control["hands"]=pose_hands(pts,vis)
         control["shoulder_px"]=float(abs(pts[11,0]-pts[12,0])*bgr.shape[1])
         control["depth_ratio"]=(
             control["scale"]/max(.04,control["baseline_scale"])
@@ -134,7 +136,9 @@ class SoloPose:
                 self.rearmed[a]=False
                 self.last_fire[a]=now
             self.previous_wrist[a]=wrist
-        return control
+        # Preserve anatomical L/R from ORIGINAL, unflipped camera input.
+        # Convert front-camera horizontal controls to player viewpoint.
+        return flip_world_controls(control)
 
 
 # Full 33-point MediaPipe skeleton (not upper body only).
@@ -148,9 +152,9 @@ POSE_LINES=(
 )
 
 
-def draw_overlay(frame,control):
+def draw_overlay(frame,control,mirrored=False):
     """Draw all 33 pose markers, connections, calibration progress and movement."""
-    out=frame.copy()
+    out=cv2.flip(frame,1) if mirrored else frame.copy()
     h,w=out.shape[:2]
     pts=control.get("landmarks")
     vis=control.get("vis")
@@ -158,13 +162,14 @@ def draw_overlay(frame,control):
         for a,b in POSE_LINES:
             if min(vis[a],vis[b])<.28:
                 continue
-            pa=tuple((pts[a,:2]*[w,h]).astype(int))
-            pb=tuple((pts[b,:2]*[w,h]).astype(int))
+            pa=(int((1.-pts[a,0] if mirrored else pts[a,0])*w),int(pts[a,1]*h))
+            pb=(int((1.-pts[b,0] if mirrored else pts[b,0])*w),int(pts[b,1]*h))
             cv2.line(out,pa,pb,(45,230,110),2,cv2.LINE_AA)
         for i in range(min(33,len(pts))):
             if vis[i]<.28:
                 continue
-            x,y=(pts[i,:2]*[w,h]).astype(int)
+            x=int((1.-pts[i,0] if mirrored else pts[i,0])*w)
+            y=int(pts[i,1]*h)
             cv2.circle(out,(int(x),int(y)),4,(10,20,25),-1,cv2.LINE_AA)
             cv2.circle(out,(int(x),int(y)),2,(0,235,255),-1,cv2.LINE_AA)
     dark=out[:99,:]
