@@ -10,6 +10,7 @@ from OpenGL.GL import *
 from OpenGL.GLU import *
 from fps3d.renderer import Scene, box
 from .motion import smooth_value
+from .robot_rig import retarget_pose, SmoothRobotPose, BONES
 
 
 class SoloScene(Scene):
@@ -22,6 +23,8 @@ class SoloScene(Scene):
         self.head_screen=None
         self.animation_t=0.
         self.camera_head_x=0.0
+        self.shadow_view=True
+        self.robot_pose=SmoothRobotPose()
         self.camera_roll=0.0
         # Per-hand pose-driven interpolation; independently smooth both fists.
         self.fist_offsets={"left":[0.,0.,0.],"right":[0.,0.,0.]}
@@ -145,6 +148,41 @@ class SoloScene(Scene):
             strap=(.96,.74,.18) if name=="right" else (.83,.92,.96)
             box(gx,gy-.22,gz+.02,.34,.12,.30,strap)
 
+    def draw_shadow_robot(self, player, control, dt):
+        """Render an original robot with independently articulated limbs."""
+        targets=retarget_pose(control.get("landmarks"),control.get("vis"))
+        joints=self.robot_pose.update(targets,dt)
+        armor=(.15,.50,.73)
+        light=(.43,.81,.94)
+        gunmetal=(.11,.16,.24)
+        steel=(.53,.62,.70)
+        glPushMatrix()
+        glTranslatef(player["x"],0,player["z"])
+        # Dynamic bones from ankles to head; no hardcoded boxing arm pose.
+        for left,right in BONES:
+            a,b=joints[left],joints[right]
+            upper=left.endswith("shoulder") or left.endswith("hip")
+            thickness=.13 if upper else .095
+            color=gunmetal if ("hip" in left or "knee" in left) else steel
+            self.segment(a,b,thickness,color)
+        for name,point in joints.items():
+            size=.16 if "shoulder" in name or "hip" in name else .11
+            if name in ("left_wrist","right_wrist"):
+                size=.22
+            if name=="head":
+                size=.28
+            color=armor if name in ("left_wrist","right_wrist","head") else light
+            self.sphere(point,size,color,16)
+        # Chest follows the actual shoulder/hip positions: draw a bright
+        # central power core and joint plates.
+        neck=joints["neck"]
+        hip=joints["hip_center"]
+        core=tuple(hip[i]*.39+neck[i]*.61 for i in range(3))
+        self.sphere(core,.19,(.22,.86,.97),18)
+        for hand in ("left_wrist","right_wrist"):
+            self.sphere(joints[hand],.235,armor,18)
+        glPopMatrix()
+
     def render(self, fight, dt, control=None):
         self.animation_t+=dt
         glViewport(0,0,self.width,self.height)
@@ -166,18 +204,28 @@ class SoloScene(Scene):
         angle=math.radians(self.camera_roll)
         # Roll rotates the horizon around the optical axis, while lateral
         # camera displacement produces real parallax in the ring.
-        eye=(p["x"]+self.camera_head_x,1.72,p["z"]+.38)
-        target=(p["x"]+self.camera_head_x*.30,1.54,p["z"]-5.)
-        gluLookAt(*eye,*target,math.sin(angle),math.cos(angle),0)
+        if self.shadow_view:
+            # Third-person shadow training shows the player's complete robot
+            # and bot simultaneously, essential to calibrate knee/arm/hip.
+            eye=(p["x"]+3.6,3.15,p["z"]+5.7)
+            target=(p["x"]*.75+fight.bot["x"]*.25,1.42,p["z"]-1.25)
+            gluLookAt(*eye,*target,0,1,0)
+        else:
+            eye=(p["x"]+self.camera_head_x,1.72,p["z"]+.38)
+            target=(p["x"]+self.camera_head_x*.30,1.54,p["z"]-5.)
+            gluLookAt(*eye,*target,math.sin(angle),math.cos(angle),0)
         glCallList(self.arena_list)
         self.fighter(fight.bot)
+        if self.shadow_view:
+            self.draw_shadow_robot(p,control,dt)
         # Project bot's actual 3D head into the 2D HUD for the label.
         xx,yy,_=gluProject(fight.bot["x"],2.88,fight.bot["z"],
                             glGetDoublev(GL_MODELVIEW_MATRIX),
                             glGetDoublev(GL_PROJECTION_MATRIX),
                             glGetIntegerv(GL_VIEWPORT))
         self.head_screen=(float(xx),float(self.height-yy))
-        self.player_gloves(p,control,dt)
+        if not self.shadow_view:
+            self.player_gloves(p,control,dt)
 
     def _hud_text(self,s,text,x,y,font,color=(245,246,248),center=False):
         image=font.render(text,True,color)
@@ -197,7 +245,8 @@ class SoloScene(Scene):
         if fight.bot["hp"]>0:
             pygame.draw.rect(h,(234,62,78),(self.width-397,49,round(365*fight.bot["hp"]/100),23),border_radius=5)
         self._hud_text(h,f"{int(fight.seconds):02d}s",self.width/2,10,self.font_heading,(255,215,110),True)
-        self._hud_text(h,"SOLO BOXING 3D",self.width/2,62,self.font_small,(170,207,250),True)
+        self._hud_text(h,"SHADOW ROBOT MODE" if self.shadow_view else "FIRST PERSON BOXING",
+                       self.width/2,62,self.font_small,(170,207,250),True)
         self._hud_text(h,f"HEAD {self.camera_roll:+.0f} deg  |  L/ R GLOVE TRACKING",self.width/2,84,self.font_small,(154,236,188),True)
         # Real projected coordinates above the bot's head.
         if self.head_screen is not None:
@@ -237,7 +286,7 @@ class SoloScene(Scene):
             y=self.height-ph-45
             pygame.draw.rect(h,(8,12,20,230),(x-4,y-4,pw+8,ph+8),border_radius=7)
             h.blit(image,(x,y))
-            self._hud_text(h,"33-POINT POSE | V: SIZE | C: RECALIBRATE",x+3,y+ph+7,self.font_small)
+            self._hud_text(h,"33 POINTS | TAB: VIEW | V: SIZE | C: CALIBRATE",x+3,y+ph+7,self.font_small)
         # Transparent HUD, rendered through a single OpenGL texture.
         glDisable(GL_LIGHTING)
         glDisable(GL_DEPTH_TEST)

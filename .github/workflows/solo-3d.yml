@@ -1,7 +1,7 @@
 name: Solo 3D tests
 on:
   push:
-    branches: [main, feature/anatomical-hands-smooth-gloves]
+    branches: [main, feature/robot-shadow-mode]
   pull_request:
 jobs:
   syntax-and-gameplay:
@@ -24,3 +24,5 @@ jobs:
         run: python -m unittest discover -s tests -p 'test_pose_source.py' -v
       - name: Anatomical L/R wrist and camera mapping regression
         run: python -m unittest discover -s tests -p 'test_anatomical_hands.py' -v
+      - name: Test full robot pose retargeting
+        run: python -m unittest discover -s tests -p 'test_robot_shadow.py' -v
