@@ -107,6 +107,7 @@ class SoloPose:
         measured=head_measure(pts,vis)
         control["head_roll"],control["head_offset"]=self.head.update(measured,dt)
 
+        width=max(float(np.linalg.norm(pts[11,:2]-pts[12,:2])),0.08)
         shoulder_y=float(np.mean(pts[[11,12],1]))
         wleft,wright=pts[15],pts[16]
         guard=(min(vis[15],vis[16])>.48 and
