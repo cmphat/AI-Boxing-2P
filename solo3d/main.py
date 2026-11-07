@@ -100,7 +100,8 @@ def main():
 
             # Before camera calibration completes, display telemetry and keep
             # combat paused. Manual WASD still works if user needs fallback.
-            gameplay_ready=(args.demo or bool(control.get("calibrated")))
+            gameplay_ready=(args.demo or bool(control.get("calibrated") and
+                                                  control.get("tracked")))
             if gameplay_ready or (side!=0 or depth!=0 or force_punch):
                 fight.update(dt,control,move=(side,depth),force_punch=force_punch)
             scene.render(fight,dt,control)
