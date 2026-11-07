@@ -1,5 +1,29 @@
 # AI BOXING SOLO 3D – First Person + Coordinates + Moving Bot
 
+## QUAN TRỌNG: kiểm tra chuyển động TRƯỚC khi chơi (Tracking V2)
+
+Bản trước có thể trông như không di chuyển khi hông ra ngoài khung hình. Bản này dùng hai vai để theo dõi tiếp, lấy mẫu hiệu chuẩn 12 frame và vẽ đủ **33 điểm MediaPipe** (chỉ các điểm nhìn thấy được mới hiển thị). Dùng **Pose Full** tự động nếu setup tải được, nếu không dùng Lite.
+
+**Bước 1:** Tải lại source nhánh `main`, chạy `setup_3d.bat` để cài đầy đủ.
+
+**Bước 2:** Chạy `run_tracking_diagnostics.bat` thay vì vào game ngay. Đây là cửa sổ webcam riêng, không cần OpenGL. Nó hiện:
+- `CALIBRATING XX%`: đứng yên và hướng mặt vào camera cho tới 100%.
+- `TRACKED` + `X, Z`: sang trái thì X giảm; sang phải X tăng; bước gần camera thì Z giảm; lùi thì Z tăng.
+- `SCALE`: kích thước cơ thể ước lượng trên ảnh, tăng khi đến gần webcam.
+- `HEAD`: góc nghiêng đầu; `QUALITY`: độ tin cậy vai.
+- Đầy đủ 33 điểm landmark và các xương nối khi có độ tin cậy phù hợp.
+- `C` hiệu chuẩn lại, `S` lưu ảnh, `Q` thoát.
+- CSV `motion_log.csv` được lưu tại thư mục bạn chạy tool.
+
+**Bước 3:** Khi X/Z thay đổi trong chẩn đoán, mở `run_solo_3d.bat`. Bấm **B** để làm bot đứng yên, sau đó đi tiến/lùi hoặc trái/phải để tự kiểm tra cảnh 3D có dịch chuyển hay không. Bấm B lần nữa để bot tiếp tục chiến đấu. Bấm V để phóng to/thu nhỏ cửa sổ camera + skeleton ở góc phải. Bấm C để hiệu chuẩn lại khi đứng vị trí mới.
+
+**Lưu ý:** 33 điểm chỉ là tổng số landmark mà model ước lượng; không phải lúc nào nó cũng thấy đủ 33 điểm. Để kiểm tra chân, đầu gối, gót và bàn chân, webcam cần nhìn được toàn thân. Khi chỉ nhìn thấy thân trên, hai vai vẫn đủ để dịch chuyển X/Z tương đối nhưng chất lượng độ sâu có thể kém hơn.
+
+**Khi quay video lỗi:** Hãy gửi ảnh chụp cửa sổ chẩn đoán ở hai vị trí đứng khác nhau hoặc file `motion_log.csv`. Nếu tọa độ không đổi, đó là lỗi Pose/hiệu chuẩn; nếu tọa độ đổi nhưng cảnh 3D không dịch chuyển, đó là lỗi phần render/game. Có thể chọn `--camera 1` nếu Windows chọn nhầm webcam.
+
+Đây vẫn là mô hình một camera, nên chiều sâu dựa vào **kích thước cơ thể tương đối**, không phải đo khoảng cách chính xác theo mét. Không nên báo cáo tọa độ này như đo đạc vật lý chính xác.
+
+
 ## Smoother camera + head dodge (latest)
 
 - **Tilt head left/right:** the first-person horizon rolls with your head by up to 22 degrees. The camera also moves sideways relative to your shoulders for a real parallax dodge.
