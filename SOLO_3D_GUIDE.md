@@ -1,5 +1,25 @@
 # AI BOXING SOLO 3D – First Person + Coordinates + Moving Bot
 
+## Latest: Anatomical hands and smoother 3D graphics
+
+- **Physical RIGHT hand = RIGHT 3D glove**, physical LEFT hand = LEFT 3D glove. MediaPipe Pose indices are anatomical: left shoulder/elbow/wrist `11/13/15`; right shoulder/elbow/wrist `12/14/16`.
+- The camera pose model now processes **the original unflipped image**. Only the camera-preview window is mirrored like a selfie. This avoids switching anatomical left and right during model inference.
+- The **RIGHT glove has a gold wrist strap**, while the left uses a light-colored strap to help confirm which glove is moving.
+- Both 3D gloves now follow their own measured wrist displacement (including height and approximate forward extension). Smooth interpolation at display frame rate reduces jerky movements. If a hand is occluded, its glove gently returns to a neutral location instead of jumping to the other hand.
+- Rendering improvements: a GPU display list caches static arena geometry; the webcam preview is only resized when its image changes; 4x multisample anti-aliasing is requested if the Windows graphics driver supports it.
+- Tests check that moving landmark 16 changes only the RIGHT glove and landmark 15 changes only the LEFT glove.
+
+### How to verify handedness on Windows
+
+1. Update the `main` branch and run `setup_3d.bat` (existing installations usually only need the source files updated).
+2. Run `run_solo_3d.bat`; stand facing the webcam and press `C` to recalibrate.
+3. Hold your left hand still and raise **your right hand**: only the **right glove with the gold strap** should rise or extend.
+4. Repeat with your left hand. Move each arm independently.
+5. `run_tracking_diagnostics.bat` can show the 33-point skeleton. Its preview is mirrored, but landmark semantic labels remain anatomical.
+
+The 3D fists are controlled by estimated wrist position, not a fully rigged photorealistic avatar. Performance and sensor accuracy depend on the computer and webcam. If there is a left-right inversion on your actual setup, capture a short diagnostic video so the input configuration can be checked instead of applying blind inversions.
+
+
 ## QUAN TRỌNG: kiểm tra chuyển động TRƯỚC khi chơi (Tracking V2)
 
 Bản trước có thể trông như không di chuyển khi hông ra ngoài khung hình. Bản này dùng hai vai để theo dõi tiếp, lấy mẫu hiệu chuẩn 12 frame và vẽ đủ **33 điểm MediaPipe** (chỉ các điểm nhìn thấy được mới hiển thị). Dùng **Pose Full** tự động nếu setup tải được, nếu không dùng Lite.
