@@ -23,6 +23,8 @@ class SoloScene(Scene):
         self.animation_t=0.
         self.camera_head_x=0.0
         self.camera_roll=0.0
+        # Per-hand pose-driven interpolation; independently smooth both fists.
+        self.fist_offsets={"left":[0.,0.,0.],"right":[0.,0.,0.]}
         # Allocate the HUD texture once; updates avoid re-allocating each frame.
         glBindTexture(GL_TEXTURE_2D,self.hud_texture)
         glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA,self.width,self.height,
@@ -102,23 +104,37 @@ class SoloScene(Scene):
             box(glove[0],glove[1]-.15,glove[2]-.01,.31,.10,.27,accent)
         glPopMatrix()
 
-    def player_gloves(self, player):
-        # Visible first-person gloves follow the moving camera.
+    def player_gloves(self, player, control, dt):
+        """Gloves follow tracked wrists, with independent left/right easing.
+
+        Camera motion drives the world position; skeleton wrist offsets drive
+        each glove. A punch additionally extends its matching glove smoothly.
+        """
         x,z=player["x"],player["z"]
-        for side in (-1.,1.):
-            active=player["punch_timer"]>0 and (
-                (player["punch_hand"]=="left" and side<0) or
-                (player["punch_hand"]=="right" and side>0)
-            )
+        hands=control.get("hands") or {}
+        for side, name in ((-1.,"left"),(1.,"right")):
+            measured=hands.get(name) if control.get("tracked") else None
+            desired=measured if measured is not None else (0.,0.,0.)
+            current=self.fist_offsets[name]
+            tau=.058 if measured is not None else .20
+            for i in range(3):
+                current[i]=smooth_value(current[i],desired[i],dt,tau)
+
+            attacking=(player["punch_timer"]>0 and
+                       player["punch_hand"]==name)
             phase=max(0.,min(1.,(.27-player["punch_timer"])/.27))
-            extension=math.sin(phase*math.pi)*1.1 if active else 0.
-            gx=x+side*(.50 if player["guard"] else .73)
-            gy=1.40 if player["guard"] else 1.05
-            gz=z-.52-extension
-            forearm=(x+side*.92,.60,z+.08)
-            self.segment(forearm,(gx,gy-.09,gz+.14),.19,(.58,.36,.27))
-            self.sphere((gx,gy,gz),.31,(.05,.47,.92),24)
-            box(gx,gy-.22,gz+.04,.33,.13,.30,(.94,.94,.95))
+            extension=(math.sin(phase*math.pi)*1.05) if attacking else 0.
+            guard_y=.25 if player["guard"] else 0.
+            ox,oy,oz=current
+            gx=x+side*.68+ox
+            gy=1.12+guard_y+oy
+            gz=z-.62-oz-extension
+            elbow=(x+side*.87,.66+guard_y*.6,z+.07)
+            self.segment(elbow,(gx,gy-.12,gz+.16),.185,(.62,.40,.29))
+            self.sphere((gx,gy,gz),.305,(.06,.48,.90),24)
+            # Distinct colored wrist strap on the physical RIGHT glove.
+            strap=(.96,.74,.18) if name=="right" else (.83,.92,.96)
+            box(gx,gy-.22,gz+.02,.34,.12,.30,strap)
 
     def render(self, fight, dt, control=None):
         self.animation_t+=dt
@@ -152,7 +168,7 @@ class SoloScene(Scene):
                             glGetDoublev(GL_PROJECTION_MATRIX),
                             glGetIntegerv(GL_VIEWPORT))
         self.head_screen=(float(xx),float(self.height-yy))
-        self.player_gloves(p)
+        self.player_gloves(p,control,dt)
 
     def _hud_text(self,s,text,x,y,font,color=(245,246,248),center=False):
         image=font.render(text,True,color)
@@ -173,7 +189,7 @@ class SoloScene(Scene):
             pygame.draw.rect(h,(234,62,78),(self.width-397,49,round(365*fight.bot["hp"]/100),23),border_radius=5)
         self._hud_text(h,f"{int(fight.seconds):02d}s",self.width/2,10,self.font_heading,(255,215,110),True)
         self._hud_text(h,"SOLO BOXING 3D",self.width/2,62,self.font_small,(170,207,250),True)
-        self._hud_text(h,f"HEAD {self.camera_roll:+.0f} deg",self.width/2,84,self.font_small,(154,236,188),True)
+        self._hud_text(h,f"HEAD {self.camera_roll:+.0f} deg  |  L/ R GLOVE TRACKING",self.width/2,84,self.font_small,(154,236,188),True)
         # Real projected coordinates above the bot's head.
         if self.head_screen is not None:
             x,y=self.head_screen
