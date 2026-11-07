@@ -25,6 +25,15 @@ class SoloScene(Scene):
         self.camera_roll=0.0
         # Per-hand pose-driven interpolation; independently smooth both fists.
         self.fist_offsets={"left":[0.,0.,0.],"right":[0.,0.,0.]}
+        self._preview_cache_source=None
+        self._preview_cache_size=None
+        self._preview_cache_surface=None
+        # Cache all static ring geometry in one OpenGL display list. This
+        # removes many Python/OpenGL draw calls from each rendering frame.
+        self.arena_list=glGenLists(1)
+        glNewList(self.arena_list,GL_COMPILE)
+        self.arena_solo()
+        glEndList()
         # Allocate the HUD texture once; updates avoid re-allocating each frame.
         glBindTexture(GL_TEXTURE_2D,self.hud_texture)
         glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA,self.width,self.height,
@@ -160,7 +169,7 @@ class SoloScene(Scene):
         eye=(p["x"]+self.camera_head_x,1.72,p["z"]+.38)
         target=(p["x"]+self.camera_head_x*.30,1.54,p["z"]-5.)
         gluLookAt(*eye,*target,math.sin(angle),math.cos(angle),0)
-        self.arena_solo()
+        glCallList(self.arena_list)
         self.fighter(fight.bot)
         # Project bot's actual 3D head into the 2D HUD for the label.
         xx,yy,_=gluProject(fight.bot["x"],2.88,fight.bot["z"],
@@ -219,7 +228,11 @@ class SoloScene(Scene):
         # 33-point skeleton, unlike the old 240x135 preview.
         if preview is not None:
             pw,ph=(365,205) if preview_large else (240,135)
-            image=pygame.transform.smoothscale(preview,(pw,ph))
+            if preview is not self._preview_cache_source or self._preview_cache_size!=(pw,ph):
+                self._preview_cache_surface=pygame.transform.smoothscale(preview,(pw,ph))
+                self._preview_cache_source=preview
+                self._preview_cache_size=(pw,ph)
+            image=self._preview_cache_surface
             x=self.width-pw-20
             y=self.height-ph-45
             pygame.draw.rect(h,(8,12,20,230),(x-4,y-4,pw+8,ph+8),border_radius=7)
@@ -258,3 +271,9 @@ class SoloScene(Scene):
         glEnable(GL_CULL_FACE)
         glEnable(GL_DEPTH_TEST)
         glEnable(GL_LIGHTING)
+
+    def close(self):
+        if getattr(self,"arena_list",0):
+            glDeleteLists(self.arena_list,1)
+            self.arena_list=0
+        super().close()
