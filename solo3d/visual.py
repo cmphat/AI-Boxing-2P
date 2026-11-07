@@ -327,7 +327,14 @@ class SoloScene(Scene):
         self._hud_text(h,f"{int(fight.seconds):02d}s",self.width/2,10,self.font_heading,(255,215,110),True)
         self._hud_text(h,"SHADOW ROBOT DEBUG VIEW" if self.shadow_view else "FIRST PERSON BOXING",
                        self.width/2,62,self.font_small,(170,207,250),True)
-        self._hud_text(h,f"HEAD {self.camera_roll:+.0f} deg  |  L/ R GLOVE TRACKING",self.width/2,84,self.font_small,(154,236,188),True)
+        arms=control.get("arm_tracking",{})
+        left_ok=bool(arms.get("left",False))
+        right_ok=bool(arms.get("right",False))
+        arm_label=("ARMS TRACKED  L ✓  R ✓" if left_ok and right_ok else
+                   "STEP BACK: SHOW BOTH ELBOWS + WRISTS")
+        arm_color=(154,236,188) if left_ok and right_ok else (255,190,105)
+        self._hud_text(h,f"HEAD {self.camera_roll:+.0f} deg  |  {arm_label}",
+                       self.width/2,84,self.font_small,arm_color,True)
         # Real projected coordinates above the bot's head.
         if self.head_screen is not None:
             x,y=self.head_screen
@@ -338,15 +345,19 @@ class SoloScene(Scene):
                 pygame.draw.rect(h,(8,14,22,205),rect,border_radius=7)
                 h.blit(txt,(rect.x+10,rect.y+3))
         # Fixed status panel.
-        pygame.draw.rect(h,(9,17,29,207),(15,self.height-112,465,98),border_radius=12)
-        self._hud_text(h,f"YOU  X:{fight.player['x']:+.2f}   Z:{fight.player['z']:+.2f}",30,self.height-103,self.font_info,(105,217,255))
-        self._hud_text(h,f"DISTANCE {fight.distance():.2f} m (virtual)  |  FPS {fps:.0f}",30,self.height-74,self.font_small)
-        status=("POSE TRACKED" if control.get("tracked") else "NO POSE")
+        pygame.draw.rect(h,(9,17,29,218),(15,self.height-132,500,116),border_radius=12)
+        self._hud_text(h,f"YOU  X:{fight.player['x']:+.2f}   Z:{fight.player['z']:+.2f}",
+                       30,self.height-124,self.font_info,(105,217,255))
+        self._hud_text(h,f"RANGE {fight.distance():.2f} m  |  HITS {fight.hits}  |  FPS {fps:.0f}",
+                       30,self.height-94,self.font_small)
+        status=("BODY TRACKED" if control.get("tracked") else "NO BODY TRACK")
         if not control.get("calibrated",True) and mode != "KEYBOARD DEMO":
             status=f"CALIBRATING {control.get('calibration',0)}% - HOLD STILL"
-        self._hud_text(h,status+
-                        f"  |  {mode.upper()}  |  DODGE {self.camera_head_x:+.2f}",30,self.height-51,self.font_small,
-                        (105,242,153) if control.get("tracked") else (250,180,94))
+        arm_state=("L+R ARMS READY" if left_ok and right_ok else "ARMS NOT VISIBLE")
+        self._hud_text(h,status+"  |  "+arm_state,30,self.height-70,self.font_small,
+                       (105,242,153) if left_ok and right_ok else (255,190,105))
+        self._hud_text(h,"WASD MOVE  |  J/K TEST PUNCH  |  C RECALIBRATE  |  TAB ROBOT VIEW",
+                       30,self.height-46,self.font_small,(205,215,229))
         if fight.message_timer>0:
             self._hud_text(h,fight.message,self.width/2,125,self.font_heading,(255,208,112),True)
         if fight.finished:
@@ -356,7 +367,7 @@ class SoloScene(Scene):
         # Diagnostic camera is deliberately large enough to see the full
         # 33-point skeleton, unlike the old 240x135 preview.
         if preview is not None:
-            pw,ph=(365,205) if preview_large else (240,135)
+            pw,ph=(320,180) if preview_large else (240,135)
             if preview is not self._preview_cache_source or self._preview_cache_size!=(pw,ph):
                 self._preview_cache_surface=pygame.transform.smoothscale(preview,(pw,ph))
                 self._preview_cache_source=preview
@@ -366,7 +377,7 @@ class SoloScene(Scene):
             y=self.height-ph-45
             pygame.draw.rect(h,(8,12,20,230),(x-4,y-4,pw+8,ph+8),border_radius=7)
             h.blit(image,(x,y))
-            self._hud_text(h,"33 POINTS | TAB: ROBOT VIEW | V: SIZE | C: CALIBRATE",x+3,y+ph+7,self.font_small)
+            self._hud_text(h,"POSE PREVIEW | V: SIZE | C: CALIBRATE",x+3,y+ph+7,self.font_small)
         # Transparent HUD, rendered through a single OpenGL texture.
         glDisable(GL_LIGHTING)
         glDisable(GL_DEPTH_TEST)
