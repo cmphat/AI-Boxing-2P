@@ -3,9 +3,8 @@
 This is an original articulated robot design inspired by the general *shadow mimicry* idea from robot-boxing fiction. **It is not a licensed Atom/Real Steel model.** The game prototype is rendered with procedural OpenGL parts, so it will not look photorealistic.
 
 ## Changes in this prototype
-- **Tab** toggles between:
-  - **SHADOW ROBOT (third person)**: see the full player-controlled robot and opponent in the ring. Robot arms, shoulders, elbows, wrists, torso, hips, knees, and ankles are independently driven by tracked MediaPipe Pose landmarks.
-  - **FIRST PERSON**: existing first-person boxing with 3D gloves.
+- The game starts in **FIRST PERSON BOXING**. Both arms are rendered from shoulder, elbow and wrist tracking.
+- **Tab** toggles the optional **SHADOW ROBOT debug view** (third person) so you can inspect full-body pose retargeting. Press Tab again to return to the actual boxing view.
 - The robot's **right wrist always uses anatomical landmark 16**, and left wrist uses landmark 15.
 - Skeleton retargeting uses the shoulder-to-hip body scale; the robot pose is interpolated every rendered frame for smoother movement.
 - Occluded joints fall back to a neutral pose. The 33-landmark diagnostic still helps distinguish image detection problems from 3D rendering problems.
@@ -14,8 +13,8 @@ This is an original articulated robot design inspired by the general *shadow mim
 1. Pull latest GitHub main or download a fresh ZIP.
 2. Run `setup_3d.bat` once if libraries are not installed.
 3. Run `run_tracking_diagnostics.bat` to verify all body joints in the webcam.
-4. Run `run_solo_3d.bat` for the 3D game.
-5. Press **Tab** to toggle full robot / first person. **C** recalibrates body position. **B** freezes the opponent so you can test movements clearly. **V** changes camera diagnostic size.
+4. Run `run_solo_3d.bat` for the 3D game; first-person is the default.
+5. Press **Tab** only to inspect the optional full-body robot debug view. **C** recalibrates body position. **B** freezes the opponent so you can test movements clearly. **V** changes camera diagnostic size.
 
 ## Recommended 1-minute verification
 1. Show your **whole body** to the webcam, including feet and knees. Stand facing it with decent lighting.
