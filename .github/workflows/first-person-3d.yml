@@ -1,0 +1,17 @@
+name: First Person 3D checks
+on:
+  push:
+    branches: [feature/first-person-3d, main]
+  pull_request:
+jobs:
+  static-and-gameplay:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Compile new Python modules
+        run: python -m compileall -q fps3d
+      - name: Unit test gameplay logic
+        run: python -m unittest discover -s tests -p 'test_fps3d_game.py' -v
