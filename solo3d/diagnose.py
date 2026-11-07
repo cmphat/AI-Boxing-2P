@@ -49,7 +49,7 @@ def main():
             # Inference uses unmirrored image for left/right correctness.
             last_ts=max(last_ts+1,int(time.monotonic()*1000))
             ctl=tracker.process(frame,last_ts)
-            overlay=cv2.flip(draw_overlay(frame,ctl),1)
+            overlay=draw_overlay(frame,ctl,mirrored=True)
             cv2.putText(overlay,"C CALIBRATE | Q QUIT | S SAVE IMAGE",
                         (8,overlay.shape[0]-13),cv2.FONT_HERSHEY_SIMPLEX,.67,(255,255,255),2)
             cv2.imshow("AI Boxing - 33 Landmark Tracking Diagnosis",overlay)
