@@ -9,6 +9,7 @@ import pygame
 from OpenGL.GL import *
 from OpenGL.GLU import *
 from fps3d.renderer import Scene, box
+from .motion import smooth_value
 
 
 class SoloScene(Scene):
@@ -20,6 +21,8 @@ class SoloScene(Scene):
         self.font_small=pygame.font.SysFont("arial",16)
         self.head_screen=None
         self.animation_t=0.
+        self.camera_head_x=0.0
+        self.camera_roll=0.0
         glLightfv(GL_LIGHT0, GL_POSITION, (2.5, 6.0, 2.5, 1.0))
         glLightfv(GL_LIGHT0, GL_DIFFUSE, (1.0, .98, .94, 1.0))
         glLightfv(GL_LIGHT0, GL_AMBIENT, (.36,.38,.43,1.0))
@@ -113,7 +116,7 @@ class SoloScene(Scene):
             self.sphere((gx,gy,gz),.31,(.05,.47,.92),24)
             box(gx,gy-.22,gz+.04,.33,.13,.30,(.94,.94,.95))
 
-    def render(self, fight, dt):
+    def render(self, fight, dt, control=None):
         self.animation_t+=dt
         glViewport(0,0,self.width,self.height)
         glClearColor(.038,.052,.079,1)
@@ -124,10 +127,19 @@ class SoloScene(Scene):
         glMatrixMode(GL_MODELVIEW)
         glLoadIdentity()
         p=fight.player
-        # Camera remains first-person; movement is in real 3D world coordinates.
-        eye=(p["x"],1.72,p["z"]+.38)
-        target=(p["x"],1.54,p["z"]-5.)
-        gluLookAt(*eye,*target,0,1,0)
+        # Actual 3D viewpoint is linked to relative head position and tilt.
+        # Render-time easing hides 20-30Hz pose sampling between display frames.
+        control=control or {}
+        head_target=control.get("head_offset", 0.0) if control.get("tracked") else 0.0
+        roll_target=control.get("head_roll", 0.0) if control.get("tracked") else 0.0
+        self.camera_head_x=smooth_value(self.camera_head_x,head_target,dt,.105)
+        self.camera_roll=smooth_value(self.camera_roll,roll_target,dt,.110)
+        angle=math.radians(self.camera_roll)
+        # Roll rotates the horizon around the optical axis, while lateral
+        # camera displacement produces real parallax in the ring.
+        eye=(p["x"]+self.camera_head_x,1.72,p["z"]+.38)
+        target=(p["x"]+self.camera_head_x*.30,1.54,p["z"]-5.)
+        gluLookAt(*eye,*target,math.sin(angle),math.cos(angle),0)
         self.arena_solo()
         self.fighter(fight.bot)
         # Project bot's actual 3D head into the 2D HUD for the label.
@@ -157,6 +169,7 @@ class SoloScene(Scene):
             pygame.draw.rect(h,(234,62,78),(self.width-397,49,round(365*fight.bot["hp"]/100),23),border_radius=5)
         self._hud_text(h,f"{int(fight.seconds):02d}s",self.width/2,10,self.font_heading,(255,215,110),True)
         self._hud_text(h,"SOLO BOXING 3D",self.width/2,62,self.font_small,(170,207,250),True)
+        self._hud_text(h,f"HEAD {self.camera_roll:+.0f} deg",self.width/2,84,self.font_small,(154,236,188),True)
         # Real projected coordinates above the bot's head.
         if self.head_screen is not None:
             x,y=self.head_screen
@@ -171,7 +184,7 @@ class SoloScene(Scene):
         self._hud_text(h,f"YOU  X:{fight.player['x']:+.2f}   Z:{fight.player['z']:+.2f}",30,self.height-103,self.font_info,(105,217,255))
         self._hud_text(h,f"DISTANCE {fight.distance():.2f} m (virtual)  |  FPS {fps:.0f}",30,self.height-74,self.font_small)
         self._hud_text(h,("POSE TRACKED" if control.get("tracked") else "NO POSE")+
-                        f"  |  {mode.upper()}",30,self.height-51,self.font_small,
+                        f"  |  {mode.upper()}  |  DODGE {self.camera_head_x:+.2f}",30,self.height-51,self.font_small,
                         (105,242,153) if control.get("tracked") else (250,180,94))
         if fight.message_timer>0:
             self._hud_text(h,fight.message,self.width/2,125,self.font_heading,(255,208,112),True)
