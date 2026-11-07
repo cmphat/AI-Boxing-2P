@@ -1,7 +1,7 @@
 name: Solo 3D tests
 on:
   push:
-    branches: [main, feature/rebuild-tracking-v2]
+    branches: [main, feature/anatomical-hands-smooth-gloves]
   pull_request:
 jobs:
   syntax-and-gameplay:
@@ -22,3 +22,5 @@ jobs:
 
       - name: Catch SoloPose runtime variable regressions
         run: python -m unittest discover -s tests -p 'test_pose_source.py' -v
+      - name: Anatomical L/R wrist and camera mapping regression
+        run: python -m unittest discover -s tests -p 'test_anatomical_hands.py' -v
