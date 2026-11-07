@@ -54,14 +54,28 @@ def flip_world_controls(control):
     return c
 
 
-def pose_arm_joints(points, visibility, minimum_visibility=.38):
-    """Return first-person local shoulder/elbow/wrist coordinates.
-
-    X is player's anatomical left/right (right positive), Y is vertical
-    relative to the camera eye, and forward is positive. Uses all three
-    landmarks per arm rather than moving a glove independently of its elbow.
-    """
+def arm_tracking_status(points, visibility, minimum_visibility=.48):
+    """Report whether each complete anatomical arm is actually in frame."""
     if points is None or visibility is None:
+        return {"left":False,"right":False}
+    result={}
+    for name, ids in ARMS.items():
+        result[name]=all(
+            idx < len(visibility) and float(visibility[idx]) >= minimum_visibility
+            for idx in ids
+        )
+    return result
+
+
+def pose_arm_joints(points, visibility, minimum_visibility=.42):
+    """Map shoulder/elbow/wrist landmarks into a compact first-person rig.
+
+    Coordinates are dimensionless offsets from the shoulder midpoint.
+    X is player's anatomical right, Y is up, and Z is toward the camera.
+    The renderer applies a fixed camera-space depth; this function must not
+    put the gloves directly on the near clipping plane.
+    """
+    if points is None or visibility is None or len(points) < 17:
         return {}
     sw=max(math.hypot(float(points[11][0]-points[12][0]),
                       float(points[11][1]-points[12][1])),.085)
@@ -71,25 +85,23 @@ def pose_arm_joints(points, visibility, minimum_visibility=.38):
     result={}
     for name, ids in ARMS.items():
         sh,el,wr=ids
-        if float(visibility[sh])<minimum_visibility:
+        if float(visibility[sh]) < minimum_visibility:
             continue
         values={}
         for joint,idx in zip(("shoulder","elbow","wrist"),ids):
-            if float(visibility[idx])<minimum_visibility:
+            if float(visibility[idx]) < minimum_visibility:
                 continue
             p=points[idx]
-            # Webcam is unmirrored. Anatomical right appears image-left,
-            # therefore invert image X for the player's first-person view.
-            x=-(float(p[0])-cx)/sw*.92
-            y=-(float(p[1])-cy)/sw*.88
-            forward=-(float(p[2])-cz)/sw*.52
+            # Original webcam is unmirrored: anatomical right is image-left.
+            x=-(float(p[0])-cx)/sw*.82
+            y=-(float(p[1])-cy)/sw*.78
+            # Pose depth is noisy; use it only as a subtle reach cue.
+            forward=-(float(p[2])-cz)/sw*.18
             values[joint]=(
-                clamp(x,-1.15,1.15),
-                clamp(y,-.85,.85),
-                clamp(forward,-.45,.90),
+                clamp(x,-.92,.92),
+                clamp(y,-.72,.72),
+                clamp(forward,-.16,.16),
             )
-        if "shoulder" in values:
-            # The shoulder anchor stays close to the torso, not the edge of
-            # the frame. It still follows the detected shoulder asymmetry.
+        if values:
             result[name]=values
     return result

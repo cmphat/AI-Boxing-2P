@@ -1,6 +1,6 @@
 """Tests for first-person articulated arm retargeting."""
 import unittest
-from solo3d.hands import pose_arm_joints
+from solo3d.hands import pose_arm_joints, arm_tracking_status
 
 
 def pose():
@@ -43,6 +43,19 @@ class FirstPersonArmTests(unittest.TestCase):
         pts[16]=[.25,.55,-.38]
         b=pose_arm_joints(pts,vis)
         self.assertGreater(b["right"]["wrist"][2],a["right"]["wrist"][2])
+
+
+    def test_tracking_status_requires_elbow_and_wrist_visibility(self):
+        pts,vis=pose()
+        self.assertEqual(arm_tracking_status(pts,vis),{"left":True,"right":True})
+        vis[16]=.1
+        self.assertEqual(arm_tracking_status(pts,vis),{"left":True,"right":False})
+
+    def test_camera_space_depth_is_bounded(self):
+        pts,vis=pose()
+        pts[16]=[.25,.55,-2.0]
+        arms=pose_arm_joints(pts,vis)
+        self.assertLessEqual(abs(arms["right"]["wrist"][2]),.16)
 
     def test_missing_right_wrist_does_not_swap_to_left(self):
         pts,vis=pose()

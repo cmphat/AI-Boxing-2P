@@ -1,25 +1,32 @@
 # AI BOXING SOLO 3D – First Person + Coordinates + Moving Bot
 
-## Latest: First-person boxing restored + articulated arms
+## Latest: First-person rig V2 – compact arms, visible joints, clearer tracking
 
-- **Physical RIGHT hand = RIGHT 3D glove**, physical LEFT hand = LEFT 3D glove. MediaPipe Pose indices are anatomical: left shoulder/elbow/wrist `11/13/15`; right shoulder/elbow/wrist `12/14/16`.
-- The camera pose model now processes **the original unflipped image**. Only the camera-preview window is mirrored like a selfie. This avoids switching anatomical left and right during model inference.
-- The **RIGHT glove has a gold wrist strap**, while the left uses a light-colored strap to help confirm which glove is moving.
-- **First-person is now the default view again.** The game renders both arms in front of the camera.
-- Each arm is built from three independently tracked joints: shoulder → elbow → wrist. The upper arm, elbow hinge, forearm, wrist cuff and glove are rendered separately, with frame-time smoothing. The anatomical right glove keeps its gold strap.
-- Press **Tab** only if you want the optional third-person robot debug view; press Tab again to return to first-person.
-- Rendering improvements: a GPU display list caches static arena geometry; the webcam preview is only resized when its image changes; 4x multisample anti-aliasing is requested if the Windows graphics driver supports it.
-- Tests check that moving landmark 16 changes only the RIGHT glove and landmark 15 changes only the LEFT glove.
+- **First-person remains the default.** Tab is only an optional third-person robot debug view.
+- The previous arm renderer placed large gloves only 0.38 m from the camera and used 26 cm glove spheres. That made the gloves fill the screen and hid the elbow movement. V2 moves the rig to a stable camera-space depth of about 1.08 m and uses compact gloves and thinner forearms.
+- Each arm now has independently smoothed shoulder, elbow and wrist joints. Upper arm, elbow hinge, forearm, wrist cuff, knuckle plate and glove are separate rendered parts.
+- The opponent has a smoother procedural body, articulated arms and legs, two-sided guard, left/right punch animation, idle movement and hit recoil. The ring uses a darker canvas, corner pads, audience boards and overhead lights.
+- **The HUD reports whether both elbows and wrists are actually visible.** It no longer claims "L/R glove tracking" when the webcam only sees the user's face and shoulders.
+- The webcam overlay says **STEP BACK: SHOW BOTH ELBOWS + WRISTS** when arm landmarks are missing.
+- The physical RIGHT glove keeps its gold wrist strap; anatomical mapping remains based on the original, unmirrored webcam frame.
+
+### Important webcam framing – this is required for arm movement
+
+1. Put the webcam far enough away to show your head, shoulders, **both elbows and both wrists** at the same time. A face-only or head-and-shoulders crop cannot drive elbow and wrist joints.
+2. Stand about 1.5–2 m from the webcam as a starting point; adjust until both arms fit in the preview. Keep the camera around chest/shoulder height and improve room lighting.
+3. Keep your upper arms and wrists inside the image while punching. If a wrist leaves the frame or is hidden behind your torso, that arm temporarily falls back to its neutral pose.
+4. Press `C` to recalibrate while standing in the final playing position.
+5. Raise one arm at a time. The HUD should show `ARMS TRACKED L ✓ R ✓` before expecting both gloves to follow.
 
 ### How to verify handedness on Windows
 
 1. Update the `main` branch and run `setup_3d.bat` (existing installations usually only need the source files updated).
-2. Run `run_solo_3d.bat`; stand facing the webcam and press `C` to recalibrate. The game starts in **FIRST PERSON BOXING**.
-3. Hold your left hand still and raise **your right hand**: only the **right glove with the gold strap** should rise or extend.
-4. Repeat with your left hand. Move each arm independently.
-5. `run_tracking_diagnostics.bat` can show the 33-point skeleton. Its preview is mirrored, but landmark semantic labels remain anatomical.
+2. Run `run_solo_3d.bat`; stand far enough back for the complete upper body and both arms to fit.
+3. Check the camera overlay and top HUD. If either arm is not visible, change camera distance/angle before testing the gloves.
+4. Raise your right hand: only the right glove with the gold strap should move. Repeat with the left hand.
+5. `run_tracking_diagnostics.bat` shows all visible MediaPipe landmarks for deeper troubleshooting.
 
-First-person arms are controlled by estimated shoulder, elbow and wrist positions, not a fully rigged photorealistic avatar. Performance and sensor accuracy depend on the computer and webcam. If there is a left-right inversion on your actual setup, capture a short diagnostic video so the input configuration can be checked instead of applying blind inversions.
+A single webcam cannot estimate hidden joints. No renderer can animate a wrist that is outside the camera image; V2 makes this limitation explicit instead of pretending the arm is tracked.
 
 
 ## QUAN TRỌNG: kiểm tra chuyển động TRƯỚC khi chơi (Tracking V2)
