@@ -152,9 +152,9 @@ POSE_LINES=(
 )
 
 
-def draw_overlay(frame,control):
+def draw_overlay(frame,control,mirrored=False):
     """Draw all 33 pose markers, connections, calibration progress and movement."""
-    out=frame.copy()
+    out=cv2.flip(frame,1) if mirrored else frame.copy()
     h,w=out.shape[:2]
     pts=control.get("landmarks")
     vis=control.get("vis")
@@ -162,13 +162,14 @@ def draw_overlay(frame,control):
         for a,b in POSE_LINES:
             if min(vis[a],vis[b])<.28:
                 continue
-            pa=tuple((pts[a,:2]*[w,h]).astype(int))
-            pb=tuple((pts[b,:2]*[w,h]).astype(int))
+            pa=(int((1.-pts[a,0] if mirrored else pts[a,0])*w),int(pts[a,1]*h))
+            pb=(int((1.-pts[b,0] if mirrored else pts[b,0])*w),int(pts[b,1]*h))
             cv2.line(out,pa,pb,(45,230,110),2,cv2.LINE_AA)
         for i in range(min(33,len(pts))):
             if vis[i]<.28:
                 continue
-            x,y=(pts[i,:2]*[w,h]).astype(int)
+            x=int((1.-pts[i,0] if mirrored else pts[i,0])*w)
+            y=int(pts[i,1]*h)
             cv2.circle(out,(int(x),int(y)),4,(10,20,25),-1,cv2.LINE_AA)
             cv2.circle(out,(int(x),int(y)),2,(0,235,255),-1,cv2.LINE_AA)
     dark=out[:99,:]
