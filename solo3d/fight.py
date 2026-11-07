@@ -26,6 +26,8 @@ class Fight:
         self.bot_guard_timer=0.
         self.message=""
         self.message_timer=0.
+        self.dodges=0
+        self.dodge_cooldown=0.0
 
     def distance(self):
         p,b=self.player,self.bot
@@ -59,6 +61,7 @@ class Fight:
         self.message_timer=max(0.,self.message_timer-dt)
         self.player_cd=max(0.,self.player_cd-dt)
         self.bot_cd=max(0.,self.bot_cd-dt)
+        self.dodge_cooldown=max(0.,self.dodge_cooldown-dt)
         self.bot_guard_timer=max(0.,self.bot_guard_timer-dt)
         for p in (self.player,self.bot):
             p["punch_timer"]=max(0.,p["punch_timer"]-dt)
@@ -109,10 +112,21 @@ class Fight:
                 b["punch_timer"] = .28
                 b["punch_hand"]=random.choice(["left","right"])
                 if self.distance()<1.95:
-                    damage=2 if p["guard"] else base_damage
-                    p["hp"]=max(0,p["hp"]-damage)
-                    p["hit_timer"]=.28
-                    self._message("YOU BLOCKED!" if p["guard"] else f"BOT HIT -{damage}")
+                    # A dodge must exceed a real head-lean threshold.
+                    # It affects hit testing, not just the rendered camera.
+                    lean=abs(float(control.get("head_offset",0.0)))
+                    roll=abs(float(control.get("head_roll",0.0)))
+                    dodging=bool(control.get("tracked") and
+                                 (lean>.23 or roll>14.0))
+                    if dodging and self.dodge_cooldown<=0.0:
+                        self.dodges+=1
+                        self.dodge_cooldown=.52
+                        self._message("DODGE!")
+                    else:
+                        damage=2 if p["guard"] else base_damage
+                        p["hp"]=max(0,p["hp"]-damage)
+                        p["hit_timer"]=.28
+                        self._message("YOU BLOCKED!" if p["guard"] else f"BOT HIT -{damage}")
                 self.bot_cd=attack_rate+random.random()*.3
         hand=force_punch or control.get("punch")
         if hand:self.user_attack(hand)

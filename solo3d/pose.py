@@ -12,6 +12,8 @@ import cv2
 import mediapipe as mp
 import numpy as np
 
+from .motion import HeadController, head_measure, smooth_value, deadband
+
 MODEL = Path(__file__).resolve().parents[1] / "assets" / "pose_landmarker_lite.task"
 
 
@@ -44,6 +46,9 @@ class SoloPose:
         self.last_fire=[-100.,-100.]
         self.rearmed=[True,True]
         self.last_ts=-1
+        self.head=HeadController()
+        self.smooth_x=None
+        self.smooth_z=None
 
     def close(self):
         self.engine.close()
@@ -52,6 +57,9 @@ class SoloPose:
         self.baseline=None
         self.smooth_pos=None
         self.smooth_scale=None
+        self.smooth_x=None
+        self.smooth_z=None
+        self.head.reset()
 
     def process(self, bgr, timestamp_ms):
         timestamp_ms=max(timestamp_ms,self.last_ts+1)
@@ -63,9 +71,10 @@ class SoloPose:
         control={"tracked":False,"calibrated":self.baseline is not None,
                  "x":0.,"z":2.9,"guard":False,"punch":None,"confidence":0.,
                  "landmarks":None,"vis":None,"depth_ratio":1.0,"shoulder_px":0.,
-                 "fist_speed":0.0}
+                 "fist_speed":0.0,"head_roll":0.0,"head_offset":0.0}
         if not result.pose_landmarks:
             self.previous_wrist=[None,None]
+            control['head_roll'],control['head_offset']=self.head.update(None,dt)
             return control
 
         pose=result.pose_landmarks[0]
@@ -75,6 +84,7 @@ class SoloPose:
         control["vis"]=vis
         tracked_quality=min(float(vis[11]),float(vis[12]),float(vis[23]),float(vis[24]))
         if tracked_quality<.42:
+            control['head_roll'],control['head_offset']=self.head.update(None,dt)
             return control
         center=float((pts[23,0]+pts[24,0]+pts[11,0]+pts[12,0])*.25)
         width=float(abs(pts[11,0]-pts[12,0]))
@@ -88,7 +98,8 @@ class SoloPose:
             self.baseline=(center,scale)
             self.smooth_pos=np.array([center,scale],dtype=np.float32)
         raw=np.array([center,scale],dtype=np.float32)
-        self.smooth_pos=.28*raw+.72*self.smooth_pos
+        alpha=1.0-math.exp(-dt/.095)
+        self.smooth_pos=alpha*raw+(1.0-alpha)*self.smooth_pos
         c,sc=map(float,self.smooth_pos)
         origin,base_scale=self.baseline
         ratio=clamp(sc/max(.055,base_scale),.67,1.45)
@@ -96,12 +107,16 @@ class SoloPose:
         # Depth: walking physically closer increases apparent body size.
         # X: shift from your calibrated standing location. Dead zones
         # prevent skeleton jitter from moving the virtual player.
-        x_raw=(c-origin)*7.0
-        z_raw=2.95-(ratio-1.0)*8.5
-        if abs(x_raw)<.14: x_raw=0.
-        if abs(z_raw-2.95)<.18: z_raw=2.95
-        control["x"]=clamp(x_raw,-2.5,2.5)
-        control["z"]=clamp(z_raw,.55,3.55)
+        x_raw=deadband((c-origin)*7.0, .10)
+        z_raw=2.95-deadband((ratio-1.0)*8.5, .14)
+        self.smooth_x=smooth_value(self.smooth_x,clamp(x_raw,-2.5,2.5),dt,.13)
+        self.smooth_z=smooth_value(self.smooth_z,clamp(z_raw,.55,3.55),dt,.16)
+        control["x"]=self.smooth_x
+        control["z"]=self.smooth_z
+        # Only the head relative to shoulders controls camera dodge;
+        # whole-body sidestepping still controls world X.
+        measured=head_measure(pts,vis)
+        control["head_roll"],control["head_offset"]=self.head.update(measured,dt)
         control["calibrated"]=True
 
         shoulder_y=float(np.mean(pts[[11,12],1]))
@@ -153,6 +168,6 @@ def draw_overlay(frame,control):
         if vis[i]<.35: continue
         x,y=(pts[i,:2]*[w,h]).astype(int)
         cv2.circle(out,(int(x),int(y)),5,(220,230,240),-1,cv2.LINE_AA)
-    cv2.putText(out,f"X {control['x']:+.1f}  Z {control['z']:.1f}",
-                (12,26),cv2.FONT_HERSHEY_SIMPLEX,.65,(80,250,210),2)
+    cv2.putText(out,f"X {control['x']:+.1f} Z {control['z']:.1f} HEAD {control['head_roll']:+.0f}deg",
+                (12,26),cv2.FONT_HERSHEY_SIMPLEX,.58,(80,250,210),2)
     return out

@@ -1,5 +1,13 @@
 # AI BOXING SOLO 3D – First Person + Coordinates + Moving Bot
 
+## Smoother camera + head dodge (latest)
+
+- **Tilt head left/right:** the first-person horizon rolls with your head by up to 22 degrees. The camera also moves sideways relative to your shoulders for a real parallax dodge.
+- **Dodge detection:** sufficiently pronounced head lean can avoid a bot attack. Tiny tracking noise is ignored by a continuous deadzone and frame-time-aware smoothing.
+- **Smooth gameplay:** webcam capture and MediaPipe inference run on a background thread. Graphics render independently, targeting 60 FPS (actual FPS depends on computer/GPU); preview updates around 10 FPS.
+- **Calibrate with C:** stand neutrally and look forward when you press C. The current head orientation becomes zero, so you can dodge relative to your own neutral position.
+- **Keep shoulders visible:** left/right head orientation uses the eye/ear line and nose position relative to the shoulder midpoint. One webcam is approximate; head twist and occlusion may cause errors.
+
 ## What changed
 - **PvE only**: one full-screen first-person 3D view instead of two PvP viewports.
 - Refined 3D boxer with gloves, face, arms, legs; arena floor, lights and depth.
@@ -22,9 +30,10 @@ Requires Windows 10/11, Python 3.11 64-bit, webcam and OpenGL-capable driver.
 | Move physical body toward camera | Move forward (Z decreases) |
 | Step away from camera | Move backward (Z increases) |
 | Step left / right | Move X left / right |
+| Tilt your head left / right | Camera tilts and shifts sideways; large lean can dodge a bot punch |
 | Straighten arm rapidly | Punch |
 | Both wrists near shoulder / face | Guard |
-| C | Reset neutral standing calibration |
+| C | Reset neutral standing and **head pose** calibration |
 | W / S | Keyboard forward / backward |
 | A / D | Keyboard strafe left / right |
 | J / K | Keyboard left / right punch |
@@ -60,7 +69,7 @@ Webcam -> OpenCV -> MediaPipe Pose -> SoloPose
 
 ## Troubleshooting
 - Webcam unavailable: close Teams/Zoom, use `.venv\Scripts\python.exe -m solo3d.main --camera 1`.
-- Pose skeleton jitter: brighter lighting, arms clearly visible, recalibrate C.
+- Pose skeleton jitter: brighter lighting, arms clearly visible, recalibrate C. Camera roll is interpolated and tiny tilt noise is ignored.
 - Camera not working: start `run_solo_3d_demo.bat`.
 - Frame rate poor: close resource-heavy apps, update GPU drivers.
 - Setup not completed: rerun `setup_3d.bat`.
