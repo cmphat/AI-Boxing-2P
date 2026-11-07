@@ -97,7 +97,7 @@ class Scene:
         box(0, -.08, -4.0, 13, .15, 13, (.17, .23, .32))
         box(0, -.004, -4.0, 9, .035, 9, (.74,.79,.84))
         # stylized blue center circle
-        self.sphere((0,-.12,-4), 1.35, (.15, .22, .38), 24)
+        box(0, .018, -4.0, 2.0, .012, 2.0, (.15, .22, .38))
         for x in (-4.45,4.45):
             for z in (-8.4,.4):
                 box(x, 1.45, z, .14, 2.9, .14, (.23,.25,.34))
@@ -106,7 +106,7 @@ class Scene:
         for y,c in zip((.80,1.18,1.56),colors):
             for x in (-4.44,4.44):
                 self.segment((x,y,.4),(x,y,-8.4),.033,c)
-            for z in (-8.4,.4):
+            for z in (-8.4,):
                 self.segment((-4.44,y,z),(4.44,y,z),.033,c)
         # arena environment
         for x in (-6.2, 6.2):
