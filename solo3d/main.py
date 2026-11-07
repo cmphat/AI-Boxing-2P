@@ -53,7 +53,8 @@ def main():
 
         clock=pygame.time.Clock()
         cached_preview=None
-        last_preview_seq=-1
+        last_preview_frame=None
+        preview_large=True
         running=True
         while running:
             dt=min(.06,max(.001,clock.tick(60)/1000.))
@@ -68,7 +69,12 @@ def main():
                         fight.reset()
                     elif event.key==pygame.K_c and worker:
                         worker.request_calibrate()
-                        print("[HEAD CALIBRATION] Hold still facing webcam.")
+                        print("[CALIBRATION] Face camera and remain still for 12 valid frames.")
+                    elif event.key==pygame.K_v:
+                        preview_large=not preview_large
+                    elif event.key==pygame.K_b:
+                        fight.bot_frozen=not fight.bot_frozen
+                        print("[BOT] FROZEN" if fight.bot_frozen else "[BOT] ACTIVE")
                     elif event.key==pygame.K_j:
                         force_punch="left"
                     elif event.key==pygame.K_k:
@@ -89,18 +95,24 @@ def main():
                      "head_roll":0.0,"head_offset":0.0}
             if worker:
                 control,raw_preview,seq=worker.snapshot()
-                # The preview is updated at ~10 fps; the OpenGL scene stays
-                # responsive at its independent ~60 fps render rate.
-                if seq!=last_preview_seq and raw_preview is not None:
+                # Only convert a *new* diagnostic image; worker pose refreshes
+                # much more frequently than the webcam preview.
+                if raw_preview is not None and raw_preview is not last_preview_frame:
                     cached_preview=make_preview(raw_preview)
-                    last_preview_seq=seq
+                    last_preview_frame=raw_preview
 
-            fight.update(dt,control,move=(side,depth),force_punch=force_punch)
+            # Before camera calibration completes, display telemetry and keep
+            # combat paused. Manual WASD still works if user needs fallback.
+            gameplay_ready=(args.demo or bool(control.get("calibrated") and
+                                                  control.get("tracked")))
+            if gameplay_ready or (side!=0 or depth!=0 or force_punch):
+                fight.update(dt,control,move=(side,depth),force_punch=force_punch)
             scene.render(fight,dt,control)
             scene.draw_hud(
                 fight,control,cached_preview,
                 mode=("KEYBOARD DEMO" if args.demo else "WEBCAM + HEAD DODGE"),
-                fps=clock.get_fps()
+                fps=clock.get_fps(),
+                preview_large=preview_large
             )
             pygame.display.flip()
     finally:

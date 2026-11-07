@@ -13,8 +13,10 @@ import mediapipe as mp
 import numpy as np
 
 from .motion import HeadController, head_measure, smooth_value, deadband
+from .tracking import RelativeMovement, body_measure
 
 MODEL = Path(__file__).resolve().parents[1] / "assets" / "pose_landmarker_lite.task"
+FULL_MODEL = MODEL.with_name("pose_landmarker_full.task")
 
 
 def clamp(v, lo, hi):
@@ -28,11 +30,16 @@ def joint_angle(a, b, c):
 
 
 class SoloPose:
-    def __init__(self, sensitivity=1.2):
-        if not MODEL.is_file():
+    def __init__(self, sensitivity=1.2, model="auto"):
+        model_path = FULL_MODEL if model in ("auto", "full") and FULL_MODEL.is_file() else MODEL
+        if model == "full" and not FULL_MODEL.is_file():
+            raise FileNotFoundError("Full pose model missing. Run download_full_model.py")
+        if not model_path.is_file():
             raise FileNotFoundError("Missing MediaPipe model. Run setup_3d.bat first.")
+        self.model_name="full" if model_path==FULL_MODEL else "lite"
+        print("[POSE] Loaded MediaPipe model:",self.model_name,flush=True)
         opts = mp.tasks.vision.PoseLandmarkerOptions(
-            base_options=mp.tasks.BaseOptions(model_asset_path=str(MODEL)),
+            base_options=mp.tasks.BaseOptions(model_asset_path=str(model_path)),
             running_mode=mp.tasks.vision.RunningMode.VIDEO,
             num_poses=1, min_pose_detection_confidence=.50,
             min_pose_presence_confidence=.50, min_tracking_confidence=.50,
@@ -47,6 +54,7 @@ class SoloPose:
         self.rearmed=[True,True]
         self.last_ts=-1
         self.head=HeadController()
+        self.movement=RelativeMovement(calibration_frames=12)
         self.smooth_x=None
         self.smooth_z=None
 
@@ -60,6 +68,7 @@ class SoloPose:
         self.smooth_x=None
         self.smooth_z=None
         self.head.reset()
+        self.movement.reset()
 
     def process(self, bgr, timestamp_ms):
         timestamp_ms=max(timestamp_ms,self.last_ts+1)
@@ -68,12 +77,15 @@ class SoloPose:
         rgb=cv2.cvtColor(bgr,cv2.COLOR_BGR2RGB)
         frame=mp.Image(image_format=mp.ImageFormat.SRGB,data=np.ascontiguousarray(rgb))
         result=self.engine.detect_for_video(frame,timestamp_ms)
-        control={"tracked":False,"calibrated":self.baseline is not None,
-                 "x":0.,"z":2.9,"guard":False,"punch":None,"confidence":0.,
+        control={"tracked":False,"calibrated":False,
+                 "x":0.,"z":2.75,"guard":False,"punch":None,"confidence":0.,
                  "landmarks":None,"vis":None,"depth_ratio":1.0,"shoulder_px":0.,
-                 "fist_speed":0.0,"head_roll":0.0,"head_offset":0.0}
+                 "fist_speed":0.0,"head_roll":0.0,"head_offset":0.0,
+                 "calibration":0,"center":.5,"scale":0.,"baseline_scale":0.,
+                 "model":self.model_name}
         if not result.pose_landmarks:
             self.previous_wrist=[None,None]
+            control.update(self.movement.update(None,dt))
             control['head_roll'],control['head_offset']=self.head.update(None,dt)
             return control
 
@@ -82,42 +94,18 @@ class SoloPose:
         vis=np.array([float(getattr(p,"visibility",1.0) or 0) for p in pose],dtype=np.float32)
         control["landmarks"]=pts
         control["vis"]=vis
-        tracked_quality=min(float(vis[11]),float(vis[12]),float(vis[23]),float(vis[24]))
-        if tracked_quality<.42:
-            control['head_roll'],control['head_offset']=self.head.update(None,dt)
+        measure=body_measure(pts,vis,confidence=.34)
+        control.update(self.movement.update(measure,dt))
+        if measure is None:
+            control["head_roll"],control["head_offset"]=self.head.update(None,dt)
             return control
-        center=float((pts[23,0]+pts[24,0]+pts[11,0]+pts[12,0])*.25)
-        width=float(abs(pts[11,0]-pts[12,0]))
-        height=float(abs(np.mean(pts[[23,24],1])-np.mean(pts[[11,12],1])))
-        # Use width/height blended proxy to mitigate turning slightly.
-        scale=clamp(.65*width+.35*height,.055,.60)
-        control["shoulder_px"]=width*bgr.shape[1]
-        control["confidence"]=tracked_quality
-        control["tracked"]=True
-        if self.baseline is None:
-            self.baseline=(center,scale)
-            self.smooth_pos=np.array([center,scale],dtype=np.float32)
-        raw=np.array([center,scale],dtype=np.float32)
-        alpha=1.0-math.exp(-dt/.095)
-        self.smooth_pos=alpha*raw+(1.0-alpha)*self.smooth_pos
-        c,sc=map(float,self.smooth_pos)
-        origin,base_scale=self.baseline
-        ratio=clamp(sc/max(.055,base_scale),.67,1.45)
-        control["depth_ratio"]=ratio
-        # Depth: walking physically closer increases apparent body size.
-        # X: shift from your calibrated standing location. Dead zones
-        # prevent skeleton jitter from moving the virtual player.
-        x_raw=deadband((c-origin)*7.0, .10)
-        z_raw=2.95-deadband((ratio-1.0)*8.5, .14)
-        self.smooth_x=smooth_value(self.smooth_x,clamp(x_raw,-2.5,2.5),dt,.13)
-        self.smooth_z=smooth_value(self.smooth_z,clamp(z_raw,.55,3.55),dt,.16)
-        control["x"]=self.smooth_x
-        control["z"]=self.smooth_z
-        # Only the head relative to shoulders controls camera dodge;
-        # whole-body sidestepping still controls world X.
+        control["confidence"]=float(measure[2])
+        control["shoulder_px"]=float(abs(pts[11,0]-pts[12,0])*bgr.shape[1])
+        control["depth_ratio"]=(
+            control["scale"]/max(.04,control["baseline_scale"])
+            if control["calibrated"] else 1.)
         measured=head_measure(pts,vis)
         control["head_roll"],control["head_offset"]=self.head.update(measured,dt)
-        control["calibrated"]=True
 
         shoulder_y=float(np.mean(pts[[11,12],1]))
         wleft,wright=pts[15],pts[16]
@@ -148,26 +136,45 @@ class SoloPose:
         return control
 
 
-POSE_LINES=((11,12),(11,13),(13,15),(12,14),(14,16),(11,23),(12,24),(23,24))
+# Full 33-point MediaPipe skeleton (not upper body only).
+POSE_LINES=(
+    (11,12),(11,13),(13,15),(15,17),(15,19),(15,21),
+    (17,19),(12,14),(14,16),(16,18),(16,20),(16,22),(18,20),
+    (11,23),(12,24),(23,24),(23,25),(25,27),(27,29),(29,31),(27,31),
+    (24,26),(26,28),(28,30),(30,32),(28,32),
+    (0,1),(1,2),(2,3),(3,7),(0,4),(4,5),(5,6),(6,8),
+    (9,10),
+)
 
 
 def draw_overlay(frame,control):
+    """Draw all 33 pose markers, connections, calibration progress and movement."""
     out=frame.copy()
+    h,w=out.shape[:2]
     pts=control.get("landmarks")
     vis=control.get("vis")
-    if pts is None:
-        cv2.putText(out,"NO POSE",(12,26),cv2.FONT_HERSHEY_SIMPLEX,.8,(0,70,240),2)
-        return out
-    h,w=out.shape[:2]
-    for a,b in POSE_LINES:
-        if vis[a]<.35 or vis[b]<.35: continue
-        p=tuple((pts[a,:2]*[w,h]).astype(int))
-        q=tuple((pts[b,:2]*[w,h]).astype(int))
-        cv2.line(out,p,q,(60,240,100),3,cv2.LINE_AA)
-    for i in (0,11,12,13,14,15,16,23,24):
-        if vis[i]<.35: continue
-        x,y=(pts[i,:2]*[w,h]).astype(int)
-        cv2.circle(out,(int(x),int(y)),5,(220,230,240),-1,cv2.LINE_AA)
-    cv2.putText(out,f"X {control['x']:+.1f} Z {control['z']:.1f} HEAD {control['head_roll']:+.0f}deg",
-                (12,26),cv2.FONT_HERSHEY_SIMPLEX,.58,(80,250,210),2)
+    if pts is not None:
+        for a,b in POSE_LINES:
+            if min(vis[a],vis[b])<.28:
+                continue
+            pa=tuple((pts[a,:2]*[w,h]).astype(int))
+            pb=tuple((pts[b,:2]*[w,h]).astype(int))
+            cv2.line(out,pa,pb,(45,230,110),2,cv2.LINE_AA)
+        for i in range(min(33,len(pts))):
+            if vis[i]<.28:
+                continue
+            x,y=(pts[i,:2]*[w,h]).astype(int)
+            cv2.circle(out,(int(x),int(y)),4,(10,20,25),-1,cv2.LINE_AA)
+            cv2.circle(out,(int(x),int(y)),2,(0,235,255),-1,cv2.LINE_AA)
+    dark=out[:99,:]
+    cv2.rectangle(dark,(0,0),(min(w-1,540),98),(12,18,24),-1)
+    status="TRACKED" if control.get("tracked") else "NO POSE - SHOW SHOULDERS"
+    if not control.get("calibrated"):
+        status=f"CALIBRATING {control.get('calibration',0)}% - HOLD STILL"
+    cv2.putText(out,status,(10,22),cv2.FONT_HERSHEY_SIMPLEX,.58,
+                (65,250,125) if control.get("tracked") else (0,180,255),2,cv2.LINE_AA)
+    cv2.putText(out,f"X:{control.get('x',0):+.2f}  Z:{control.get('z',2.75):.2f}  SCALE:{control.get('scale',0):.3f}",
+                (10,49),cv2.FONT_HERSHEY_SIMPLEX,.56,(245,235,205),1,cv2.LINE_AA)
+    cv2.putText(out,f"HEAD:{control.get('head_roll',0):+.0f}deg  QUALITY:{control.get('confidence',0):.2f}  LANDMARKS:33",
+                (10,76),cv2.FONT_HERSHEY_SIMPLEX,.54,(80,225,250),1,cv2.LINE_AA)
     return out

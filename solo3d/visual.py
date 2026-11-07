@@ -159,7 +159,7 @@ class SoloScene(Scene):
         if center:x-=image.get_width()/2
         s.blit(image,(int(x),int(y)))
 
-    def draw_hud(self,fight,control,preview,mode="pose",fps=0):
+    def draw_hud(self,fight,control,preview,mode="pose",fps=0,preview_large=True):
         h=pygame.Surface((self.width,self.height),pygame.SRCALPHA)
         # Opaque upper strip keeps text readable and never overlaps with HP.
         pygame.draw.rect(h,(9,17,29,223),(0,0,self.width,106))
@@ -187,7 +187,10 @@ class SoloScene(Scene):
         pygame.draw.rect(h,(9,17,29,207),(15,self.height-112,465,98),border_radius=12)
         self._hud_text(h,f"YOU  X:{fight.player['x']:+.2f}   Z:{fight.player['z']:+.2f}",30,self.height-103,self.font_info,(105,217,255))
         self._hud_text(h,f"DISTANCE {fight.distance():.2f} m (virtual)  |  FPS {fps:.0f}",30,self.height-74,self.font_small)
-        self._hud_text(h,("POSE TRACKED" if control.get("tracked") else "NO POSE")+
+        status=("POSE TRACKED" if control.get("tracked") else "NO POSE")
+        if not control.get("calibrated",True) and mode != "KEYBOARD DEMO":
+            status=f"CALIBRATING {control.get('calibration',0)}% - HOLD STILL"
+        self._hud_text(h,status+
                         f"  |  {mode.upper()}  |  DODGE {self.camera_head_x:+.2f}",30,self.height-51,self.font_small,
                         (105,242,153) if control.get("tracked") else (250,180,94))
         if fight.message_timer>0:
@@ -196,15 +199,16 @@ class SoloScene(Scene):
             pygame.draw.rect(h,(6,8,13,210),(0,200,self.width,235))
             self._hud_text(h,fight.finished,self.width/2,245,self.font_heading,(255,210,113),True)
             self._hud_text(h,"R = RESTART   |   ESC = EXIT",self.width/2,307,self.font_info,center=True)
-        # Picture-in-picture camera pose diagnostics at bottom right.
+        # Diagnostic camera is deliberately large enough to see the full
+        # 33-point skeleton, unlike the old 240x135 preview.
         if preview is not None:
-            pw,ph=240,135
+            pw,ph=(365,205) if preview_large else (240,135)
             image=pygame.transform.smoothscale(preview,(pw,ph))
             x=self.width-pw-20
             y=self.height-ph-45
             pygame.draw.rect(h,(8,12,20,230),(x-4,y-4,pw+8,ph+8),border_radius=7)
             h.blit(image,(x,y))
-            self._hud_text(h,"CAMERA + POSE",x+3,y+ph+7,self.font_small)
+            self._hud_text(h,"33-POINT POSE | V: SIZE | C: RECALIBRATE",x+3,y+ph+7,self.font_small)
         # Transparent HUD, rendered through a single OpenGL texture.
         glDisable(GL_LIGHTING)
         glDisable(GL_DEPTH_TEST)

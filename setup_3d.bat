@@ -27,5 +27,8 @@ if errorlevel 1 (
   pause
   exit /b 1
 )
-echo Installation finished. Run run_3d.bat
+echo [INFO] Downloading optional Full tracking model...
+".venv\Scripts\python.exe" download_full_model.py
+if errorlevel 1 echo [WARN] Full model unavailable. Lite fallback will be used.
+echo Installation finished. Run run_solo_3d.bat for solo boxing or run_tracking_diagnostics.bat to test the webcam.
 pause

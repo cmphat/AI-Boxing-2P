@@ -27,6 +27,7 @@ class Fight:
         self.message=""
         self.message_timer=0.
         self.dodges=0
+        self.bot_frozen=False
         self.dodge_cooldown=0.0
 
     def distance(self):
@@ -82,6 +83,11 @@ class Fight:
         dx,dz=move
         p["x"]=clamp(p["x"]+dx*dt*2.3,-2.8,2.8)
         p["z"]=clamp(p["z"]+dz*dt*2.3,.4,3.8)
+        if self.bot_frozen:
+            hand=force_punch or control.get('punch')
+            if hand:self.user_attack(hand)
+            if self.bot['hp']<=0:self.finished='YOU WIN'
+            return
         self.bot_phase+=dt
         distance=self.distance()
         settings={"easy":(.85,1.8,2.2,5), "normal":(1.15,1.1,1.45,8),
