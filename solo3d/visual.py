@@ -8,7 +8,7 @@ import math
 import pygame
 from OpenGL.GL import *
 from OpenGL.GLU import *
-from fps3d.renderer import Scene, box
+from fps3d.renderer import Scene, box, material
 from .motion import smooth_value
 from .robot_rig import retarget_pose, SmoothRobotPose, BONES
 from .hands import pose_arm_joints
