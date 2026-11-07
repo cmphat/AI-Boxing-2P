@@ -59,6 +59,10 @@ def main():
         clock=pygame.time.Clock()
         ts=-1
         running=True
+        last_pose_time=0.0
+        last_preview_time=0.0
+        cached_control=None
+        cached_preview=None
         while running:
             dt=min(.07,max(.001,clock.tick(60)/1000))
             force_punch=None
@@ -69,7 +73,8 @@ def main():
                     elif ev.key==pygame.K_r:fight.reset()
                     elif ev.key==pygame.K_c and tracker:
                         tracker.calibrate()
-                        print("[CALIBRATED] Keep neutral starting stance for 2 seconds.")
+                        cached_control=None
+                        print("[CALIBRATED] Stand neutral, face camera, then tilt head to dodge.")
                     elif ev.key==pygame.K_j:force_punch="left"
                     elif ev.key==pygame.K_k:force_punch="right"
                     elif ev.key==pygame.K_1:fight=Fight("easy")
@@ -84,20 +89,32 @@ def main():
             forward=float(bool(keys[pygame.K_s]))-float(bool(keys[pygame.K_w]))
             # W forward decreases player Z; S backward increases Z.
             control={"tracked":False,"x":fight.player["x"],"z":fight.player["z"],
-                     "guard":False,"punch":None}
-            preview=None
-            if cap:
+                     "guard":False,"punch":None,"head_roll":0.,"head_offset":0.}
+            preview=cached_preview
+            if cap and (time.monotonic()-last_pose_time)>=1.0/28.0:
                 ok,frame=cap.read()
                 if ok:
                     frame=cv2.flip(frame,1)
                     ts=max(int(time.monotonic()*1000),ts+1)
-                    control=tracker.process(frame,ts)
-                    overlay=draw_overlay(frame,control)
-                    h,w=overlay.shape[:2]
-                    preview=pygame.image.frombuffer(
-                        cv2.cvtColor(overlay,cv2.COLOR_BGR2RGB).tobytes(),(w,h),"RGB").copy()
+                    cached_control=tracker.process(frame,ts)
+                    last_pose_time=time.monotonic()
+                    if last_pose_time-last_preview_time>=1.0/12.0:
+                        overlay=draw_overlay(frame,cached_control)
+                        h,w=overlay.shape[:2]
+                        cached_preview=pygame.image.frombuffer(
+                            cv2.cvtColor(overlay,cv2.COLOR_BGR2RGB).tobytes(),(w,h),"RGB").copy()
+                        last_preview_time=last_pose_time
+                    preview=cached_preview
+            if cached_control is not None:
+                control=cached_control.copy()
+                # Punches are discrete events: do not fire repeatedly when
+                # the render loop runs faster than the webcam detection.
+                cached_control["punch"]=None
+                if time.monotonic()-last_pose_time>.30:
+                    control.update({"tracked":False,"guard":False,
+                                    "punch":None,"head_roll":0.,"head_offset":0.})
             fight.update(dt,control,move=(sideways,forward),force_punch=force_punch)
-            scene.render(fight,dt)
+            scene.render(fight,dt,control)
             scene.draw_hud(fight,control,preview,mode=("KEYBOARD DEMO" if args.demo else "WEBCAM"),
                            fps=clock.get_fps())
             pygame.display.flip()
