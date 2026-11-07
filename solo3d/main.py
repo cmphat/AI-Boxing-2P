@@ -72,6 +72,9 @@ def main():
                         print("[CALIBRATION] Face camera and remain still for 12 valid frames.")
                     elif event.key==pygame.K_v:
                         preview_large=not preview_large
+                    elif event.key==pygame.K_b:
+                        fight.bot_frozen=not fight.bot_frozen
+                        print("[BOT] FROZEN" if fight.bot_frozen else "[BOT] ACTIVE")
                     elif event.key==pygame.K_j:
                         force_punch="left"
                     elif event.key==pygame.K_k:
