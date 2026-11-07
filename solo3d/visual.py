@@ -11,6 +11,7 @@ from OpenGL.GLU import *
 from fps3d.renderer import Scene, box
 from .motion import smooth_value
 from .robot_rig import retarget_pose, SmoothRobotPose, BONES
+from .hands import pose_arm_joints
 
 
 class SoloScene(Scene):
@@ -23,11 +24,15 @@ class SoloScene(Scene):
         self.head_screen=None
         self.animation_t=0.
         self.camera_head_x=0.0
-        self.shadow_view=True
+        self.shadow_view=False
         self.robot_pose=SmoothRobotPose()
         self.camera_roll=0.0
         # Per-hand pose-driven interpolation; independently smooth both fists.
         self.fist_offsets={"left":[0.,0.,0.],"right":[0.,0.,0.]}
+        self.arm_pose={
+            "left":{"shoulder":[-.50,-.04,0.],"elbow":[-.70,-.30,.05],"wrist":[-.58,-.16,.28]},
+            "right":{"shoulder":[.50,-.04,0.],"elbow":[.70,-.30,.05],"wrist":[.58,-.16,.28]},
+        }
         self._preview_cache_source=None
         self._preview_cache_size=None
         self._preview_cache_surface=None
@@ -116,38 +121,41 @@ class SoloScene(Scene):
             box(glove[0],glove[1]-.15,glove[2]-.01,.31,.10,.27,accent)
         glPopMatrix()
 
-    def player_gloves(self, player, control, dt):
-        """Gloves follow tracked wrists, with independent left/right easing.
-
-        Camera motion drives the world position; skeleton wrist offsets drive
-        each glove. A punch additionally extends its matching glove smoothly.
-        """
-        x,z=player["x"],player["z"]
-        hands=control.get("hands") or {}
-        for side, name in ((-1.,"left"),(1.,"right")):
-            measured=hands.get(name) if control.get("tracked") else None
-            desired=measured if measured is not None else (0.,0.,0.)
-            current=self.fist_offsets[name]
-            tau=.058 if measured is not None else .20
-            for i in range(3):
-                current[i]=smooth_value(current[i],desired[i],dt,tau)
-
-            attacking=(player["punch_timer"]>0 and
-                       player["punch_hand"]==name)
-            phase=max(0.,min(1.,(.27-player["punch_timer"])/.27))
-            extension=(math.sin(phase*math.pi)*1.05) if attacking else 0.
-            guard_y=.25 if player["guard"] else 0.
-            ox,oy,oz=current
-            gx=x+side*.68+ox
-            gy=1.12+guard_y+oy
-            gz=z-.62-oz-extension
-            elbow=(x+side*.87,.66+guard_y*.6,z+.07)
-            self.segment(elbow,(gx,gy-.12,gz+.16),.185,(.62,.40,.29))
-            self.sphere((gx,gy,gz),.305,(.06,.48,.90),24)
-            # Distinct colored wrist strap on the physical RIGHT glove.
-            strap=(.96,.74,.18) if name=="right" else (.83,.92,.96)
-            box(gx,gy-.22,gz+.02,.34,.12,.30,strap)
-
+    def player_arms(self, player, control, dt):
+        """Render both articulated first-person arms from shoulder/elbow/wrist."""
+        p=player
+        eye=(p["x"]+self.camera_head_x,1.72,p["z"]+.38)
+        measured=pose_arm_joints(control.get("landmarks"),control.get("vis")) if control.get("tracked") else {}
+        for side,name in ((-1.,"left"),(1.,"right")):
+            fallback={"shoulder":(side*.50,-.04,0.),"elbow":(side*.70,-.30,.05),"wrist":(side*.58,-.16,.28)}
+            arm=measured.get(name,{})
+            for joint in ("shoulder","elbow","wrist"):
+                target=arm.get(joint,fallback[joint])
+                current=self.arm_pose[name][joint]
+                tau=.052 if joint in arm else .16
+                for i in range(3):
+                    current[i]=smooth_value(current[i],target[i],dt,tau)
+            shoulder=self.arm_pose[name]["shoulder"]
+            elbow=self.arm_pose[name]["elbow"]
+            wrist=self.arm_pose[name]["wrist"]
+            def world(v,extra_forward=0.):
+                return (eye[0]+v[0],eye[1]+v[1],eye[2]-.38+v[2]+extra_forward)
+            a=world(shoulder); b=world(elbow); c=world(wrist)
+            if p["punch_timer"]>0 and p["punch_hand"]==name and control.get("landmarks") is None:
+                phase=max(0.,min(1.,(.27-p["punch_timer"])/.27))
+                c=world(wrist,math.sin(phase*math.pi)*.40)
+            upper=(.19,.31,.43); forearm=(.39,.50,.62); joint_color=(.65,.76,.84)
+            glove=(.035,.43,.82)
+            self.sphere(a,.185,upper,18)
+            self.segment(a,b,.145,upper)
+            self.sphere(b,.145,joint_color,16)
+            self.segment(b,c,.125,forearm)
+            wrist_center=world(wrist,.10); glove_center=world(wrist,.27)
+            self.segment(c,wrist_center,.105,forearm)
+            self.sphere(wrist_center,.105,joint_color,14)
+            self.sphere(glove_center,.265,glove,22)
+            strap=(.98,.76,.19) if name=="right" else (.78,.88,.96)
+            box(glove_center[0],glove_center[1]-.18,glove_center[2]-.01,.30,.105,.24,strap)
     def draw_shadow_robot(self, player, control, dt):
         """Render an original robot with independently articulated limbs."""
         targets=retarget_pose(control.get("landmarks"),control.get("vis"))
@@ -225,7 +233,7 @@ class SoloScene(Scene):
                             glGetIntegerv(GL_VIEWPORT))
         self.head_screen=(float(xx),float(self.height-yy))
         if not self.shadow_view:
-            self.player_gloves(p,control,dt)
+            self.player_arms(p,control,dt)
 
     def _hud_text(self,s,text,x,y,font,color=(245,246,248),center=False):
         image=font.render(text,True,color)
@@ -245,7 +253,7 @@ class SoloScene(Scene):
         if fight.bot["hp"]>0:
             pygame.draw.rect(h,(234,62,78),(self.width-397,49,round(365*fight.bot["hp"]/100),23),border_radius=5)
         self._hud_text(h,f"{int(fight.seconds):02d}s",self.width/2,10,self.font_heading,(255,215,110),True)
-        self._hud_text(h,"SHADOW ROBOT MODE" if self.shadow_view else "FIRST PERSON BOXING",
+        self._hud_text(h,"SHADOW ROBOT DEBUG VIEW" if self.shadow_view else "FIRST PERSON BOXING",
                        self.width/2,62,self.font_small,(170,207,250),True)
         self._hud_text(h,f"HEAD {self.camera_roll:+.0f} deg  |  L/ R GLOVE TRACKING",self.width/2,84,self.font_small,(154,236,188),True)
         # Real projected coordinates above the bot's head.
@@ -286,7 +294,7 @@ class SoloScene(Scene):
             y=self.height-ph-45
             pygame.draw.rect(h,(8,12,20,230),(x-4,y-4,pw+8,ph+8),border_radius=7)
             h.blit(image,(x,y))
-            self._hud_text(h,"33 POINTS | TAB: VIEW | V: SIZE | C: CALIBRATE",x+3,y+ph+7,self.font_small)
+            self._hud_text(h,"33 POINTS | TAB: ROBOT VIEW | V: SIZE | C: CALIBRATE",x+3,y+ph+7,self.font_small)
         # Transparent HUD, rendered through a single OpenGL texture.
         glDisable(GL_LIGHTING)
         glDisable(GL_DEPTH_TEST)
