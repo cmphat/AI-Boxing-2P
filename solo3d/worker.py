@@ -57,7 +57,8 @@ class PoseWorker:
             control=pose.copy()
             if now-received>.32:
                 control.update({"tracked":False,"punch":None,"guard":False,
-                                "head_roll":0.0,"head_offset":0.0})
+                                "head_roll":0.0,"head_offset":0.0,
+                                "arm_tracking":{"left":False,"right":False}})
             else:
                 control["punch"]=self.pending_punch
             self.pending_punch=None
