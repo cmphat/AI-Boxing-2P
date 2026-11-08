@@ -28,17 +28,18 @@ from pynput import keyboard as pynput_keyboard
 # ------------------------- CONFIGURATION -------------------------
 
 ROOT = Path(__file__).resolve().parent
-MODEL_PATH = ROOT / "assets" / "pose_landmarker_full.task"
+MODEL_PATH = ROOT / "assets" / "pose_landmarker_lite.task"
 GAME_URL = "https://www.y8.com/games/punch_boxing_championship"
 
 CAMERA_INDEX = 0
-CAMERA_CAPTURE_W = 960
-CAMERA_CAPTURE_H = 540
+CAMERA_CAPTURE_W = 640
+CAMERA_CAPTURE_H = 360
+POSE_TARGET_FPS = 24
 
-PANEL_W = 510
-PANEL_H = 520
-PREVIEW_W = 480
-PREVIEW_H = 270
+PANEL_W = 390
+PANEL_H = 465
+PREVIEW_W = 360
+PREVIEW_H = 203
 
 PUNCH_COOLDOWN = 0.34
 PUNCH_REARM_ANGLE = 128.0
@@ -61,10 +62,9 @@ POSE_CONNECTIONS = [
     (L_HIP, R_HIP),
 ]
 
-# Game keys verified against the game's published controls:
-# Q/A cross, W/Z right uppercut, Y left uppercut,
-# E right hook, T left hook, U right overhand, I left overhand,
-# D dodge, S block.
+# Y8 Punch Boxing Championship controls:
+# WASD + Q/Z handle the core punch / dodge / block actions.
+# E, T, Y, U, I are the special hook / uppercut / overhand actions.
 
 
 # ------------------------- WINDOWS WINDOW HELPERS -------------------------
@@ -85,34 +85,58 @@ def get_screen_size():
 
 
 def window_title(hwnd):
-    user32 = ctypes.windll.user32
-    length = user32.GetWindowTextLengthW(hwnd)
+    length = USER32.GetWindowTextLengthW(hwnd)
     if length <= 0:
         return ""
     buffer = ctypes.create_unicode_buffer(length + 2)
-    user32.GetWindowTextW(hwnd, buffer, len(buffer))
+    USER32.GetWindowTextW(hwnd, buffer, len(buffer))
     return buffer.value
 
 
 def find_game_window():
-    user32 = ctypes.windll.user32
     matches = []
-
     ENUMPROC = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
 
     def enum_callback(hwnd, _):
-        if not user32.IsWindowVisible(hwnd):
+        if not USER32.IsWindowVisible(hwnd):
             return True
         title = window_title(hwnd).lower()
-        if "punch boxing championship" in title or (
-            "y8.com" in title and "boxing" in title
+        if ("punch" in title and "boxing" in title) or (
+            "y8" in title and "boxing" in title
         ):
             matches.append(hwnd)
         return True
 
     callback = ENUMPROC(enum_callback)
-    user32.EnumWindows(callback, 0)
+    USER32.EnumWindows(callback, 0)
     return matches[0] if matches else None
+
+
+def find_window_for_pid(pid):
+    """Find the real browser top-level window without depending on its page title."""
+    matches = []
+    ENUMPROC = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+
+    def enum_callback(hwnd, _):
+        if not USER32.IsWindowVisible(hwnd):
+            return True
+        process_id = wintypes.DWORD(0)
+        USER32.GetWindowThreadProcessId(hwnd, ctypes.byref(process_id))
+        if process_id.value != int(pid):
+            return True
+        title = window_title(hwnd)
+        if title:
+            matches.append((hwnd, title.lower()))
+        return True
+
+    callback = ENUMPROC(enum_callback)
+    USER32.EnumWindows(callback, 0)
+    if not matches:
+        return None
+    for hwnd, title in matches:
+        if "punch" in title or "y8" in title:
+            return hwnd
+    return matches[0][0]
 
 
 def find_browser():
@@ -123,6 +147,7 @@ def find_browser():
     candidates = [
         os.path.join(pf86, "Microsoft", "Edge", "Application", "msedge.exe"),
         os.path.join(pf, "Microsoft", "Edge", "Application", "msedge.exe"),
+        os.path.join(local, "Microsoft", "Edge", "Application", "msedge.exe"),
         os.path.join(pf, "Google", "Chrome", "Application", "chrome.exe"),
         os.path.join(pf86, "Google", "Chrome", "Application", "chrome.exe"),
         os.path.join(local, "Google", "Chrome", "Application", "chrome.exe"),
@@ -147,72 +172,85 @@ def find_browser():
     )
 
 
-def arrange_game_window(hwnd, screen_w, screen_h, panel_w):
-    user32 = ctypes.windll.user32
-    game_w = max(850, screen_w - panel_w - 16)
-    game_h = max(600, screen_h - 48)
-
+def arrange_game_window(hwnd, screen_w, screen_h, panel_w=None):
+    """Give the Y8 game the full desktop viewport; the camera panel floats above it."""
     SW_RESTORE = 9
+    SW_MAXIMIZE = 3
     SWP_SHOWWINDOW = 0x0040
     SWP_NOZORDER = 0x0004
 
-    user32.ShowWindow(hwnd, SW_RESTORE)
-    user32.SetWindowPos(
-        hwnd, 0, 0, 0, game_w, game_h,
+    USER32.ShowWindow(hwnd, SW_RESTORE)
+    USER32.SetWindowPos(
+        hwnd, 0, 0, 0, screen_w, screen_h,
         SWP_SHOWWINDOW | SWP_NOZORDER
     )
-    return game_w, game_h
+    USER32.ShowWindow(hwnd, SW_MAXIMIZE)
+    return screen_w, screen_h
 
 
 def launch_or_find_game(screen_w, screen_h, panel_w, callback):
-    """Run in a worker thread; locate the real Y8 top-level window and resize it."""
+    """Launch Y8 automatically and resolve its HWND by browser PID, then title fallback."""
     try:
         hwnd = find_game_window()
         if hwnd is None:
             browser, kind = find_browser()
+            profile = os.path.join(
+                os.environ.get("LOCALAPPDATA", str(ROOT)),
+                "AIBoxing_Y8_Profile_V3"
+            )
+            os.makedirs(profile, exist_ok=True)
 
             if kind == "chromium":
-                profile = os.path.join(
-                    os.environ.get("LOCALAPPDATA", str(ROOT)),
-                    "AIBoxing_Y8_Profile_V2"
-                )
-                os.makedirs(profile, exist_ok=True)
                 args = [
                     browser,
                     f"--user-data-dir={profile}",
                     f"--app={GAME_URL}",
                     "--new-window",
+                    "--start-maximized",
                     "--no-first-run",
                     "--disable-features=TranslateUI",
                     "--autoplay-policy=no-user-gesture-required",
-                    "--window-position=0,0",
-                    f"--window-size={screen_w - panel_w - 16},{screen_h - 48}",
                 ]
             else:
                 args = [browser, "-new-window", GAME_URL]
 
-            subprocess.Popen(
+            proc = subprocess.Popen(
                 args,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
                 creationflags=getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0),
             )
 
-            # Wait up to 30 seconds for the page title, not just process creation.
-            deadline = time.time() + 30
+            deadline = time.time() + 35
             while time.time() < deadline:
-                hwnd = find_game_window()
+                hwnd = find_window_for_pid(proc.pid) or find_game_window()
                 if hwnd:
                     break
-                time.sleep(0.25)
+                time.sleep(0.20)
+
+            if hwnd is None:
+                try:
+                    os.startfile(GAME_URL)
+                except Exception:
+                    pass
+                fallback_deadline = time.time() + 15
+                while time.time() < fallback_deadline:
+                    hwnd = find_game_window()
+                    if hwnd:
+                        break
+                    time.sleep(0.25)
 
         if hwnd:
-            game_size = arrange_game_window(hwnd, screen_w, screen_h, panel_w)
+            game_size = arrange_game_window(hwnd, screen_w, screen_h)
             callback(hwnd, game_size, None)
         else:
-            callback(None, None, "Khong tim thay cua so game Y8. Hay mo game bang tay.")
+            callback(
+                None, None,
+                "Da goi trinh duyet nhung khong tim thay cua so game. "
+                "Hay kiem tra Edge/Chrome co mo duoc trang Y8 khong."
+            )
     except Exception as exc:
-        callback(None, None, str(exc))
+        callback(None, None, f"{type(exc).__name__}: {exc}")
 
 
 # ------------------------- KEYBOARD OUTPUT -------------------------
@@ -247,6 +285,10 @@ USER32.GetWindowTextLengthW.argtypes = [wintypes.HWND]
 USER32.GetWindowTextLengthW.restype = ctypes.c_int
 USER32.GetWindowTextW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
 USER32.GetWindowTextW.restype = ctypes.c_int
+USER32.GetWindowThreadProcessId.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)]
+USER32.GetWindowThreadProcessId.restype = wintypes.DWORD
+USER32.IsWindow.argtypes = [wintypes.HWND]
+USER32.IsWindow.restype = wintypes.BOOL
 USER32.IsWindowVisible.argtypes = [wintypes.HWND]
 USER32.IsWindowVisible.restype = wintypes.BOOL
 USER32.EnumWindows.argtypes = [ctypes.c_void_p, wintypes.LPARAM]
@@ -398,16 +440,20 @@ class AsyncPoseTracker:
         self.lock = threading.Lock()
         self.latest_poses = []
         self.sequence = 0
-        self.last_timestamp_ms = 0
+        self.next_timestamp_ms = 0
+        self.latest_result_timestamp_ms = 0
         self.last_result_wall_time = 0.0
+        self.result_latency_ms = 0.0
+        self.submitted_at = {}
 
         options = vision.PoseLandmarkerOptions(
             base_options=mp_python.BaseOptions(model_asset_path=str(MODEL_PATH)),
             running_mode=vision.RunningMode.LIVE_STREAM,
-            num_poses=2,
-            min_pose_detection_confidence=0.60,
-            min_pose_presence_confidence=0.60,
-            min_tracking_confidence=0.60,
+            num_poses=1,
+            min_pose_detection_confidence=0.50,
+            min_pose_presence_confidence=0.50,
+            min_tracking_confidence=0.50,
+            output_segmentation_masks=False,
             result_callback=self._on_result,
         )
         self.landmarker = vision.PoseLandmarker.create_from_options(options)
@@ -426,25 +472,38 @@ class AsyncPoseTracker:
             poses.append((norm_pack, world_pack))
 
         with self.lock:
+            completed_at = time.perf_counter()
             self.latest_poses = poses
             self.sequence += 1
-            self.last_timestamp_ms = timestamp_ms
-            self.last_result_wall_time = time.perf_counter()
+            self.latest_result_timestamp_ms = timestamp_ms
+            self.last_result_wall_time = completed_at
+            submitted = self.submitted_at.pop(timestamp_ms, completed_at)
+            self.result_latency_ms = max(0.0, (completed_at - submitted) * 1000.0)
+            if len(self.submitted_at) > 20:
+                self.submitted_at.clear()
 
     def submit(self, rgb_frame):
         timestamp_ms = max(
-            self.last_timestamp_ms + 1,
+            self.next_timestamp_ms + 1,
             int(time.perf_counter() * 1000)
         )
+        self.next_timestamp_ms = timestamp_ms
+        self.submitted_at[timestamp_ms] = time.perf_counter()
         image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_frame)
         try:
             self.landmarker.detect_async(image, timestamp_ms)
-        except ValueError:
-            pass
+        except (ValueError, RuntimeError):
+            self.submitted_at.pop(timestamp_ms, None)
 
     def get_latest(self):
         with self.lock:
-            return self.sequence, self.latest_poses, self.last_result_wall_time
+            return (
+                self.sequence,
+                self.latest_poses,
+                self.latest_result_timestamp_ms,
+                self.last_result_wall_time,
+                self.result_latency_ms,
+            )
 
     def close(self):
         self.landmarker.close()
@@ -477,7 +536,7 @@ def select_primary_pose(poses, previous_center=None):
 class OneEuroFilter:
     """Adaptive low-pass filter: smooths idle landmarks but reacts faster to punches."""
 
-    def __init__(self, min_cutoff=1.6, beta=0.12, derivative_cutoff=1.0):
+    def __init__(self, min_cutoff=3.2, beta=0.38, derivative_cutoff=1.2):
         self.min_cutoff = min_cutoff
         self.beta = beta
         self.derivative_cutoff = derivative_cutoff
@@ -571,7 +630,13 @@ class BoxingGestureEngine:
         dt = 1.0 / 30.0 if self.filter_time is None else max(
             0.008, min(0.12, now - self.filter_time)
         )
-        for i in range(min(33, len(norm), len(world))):
+        tracked_ids = (
+            NOSE, L_SHOULDER, R_SHOULDER, L_ELBOW, R_ELBOW,
+            L_WRIST, R_WRIST, L_HIP, R_HIP
+        )
+        for i in tracked_ids:
+            if i >= len(norm) or i >= len(world):
+                continue
             for axis in range(3):
                 norm[i][axis] = self.norm_filters[i][axis].filter(norm[i][axis], dt)
                 world[i][axis] = self.world_filters[i][axis].filter(world[i][axis], dt)
@@ -813,6 +878,58 @@ class BoxingGestureEngine:
 
 # ------------------------- CAMERA + UI -------------------------
 
+class CameraStream:
+    """Continuously drain the webcam in a worker thread; UI always receives the newest frame."""
+
+    def __init__(self, camera_index, width, height):
+        self.cap = cv2.VideoCapture(camera_index, cv2.CAP_DSHOW)
+        if not self.cap.isOpened():
+            self.cap.release()
+            self.cap = cv2.VideoCapture(camera_index)
+        if not self.cap.isOpened():
+            raise RuntimeError(
+                "Khong mo duoc webcam. Dong Zoom/Teams/Camera app "
+                "hoac doi CAMERA_INDEX trong main.py."
+            )
+
+        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
+        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
+        self.cap.set(cv2.CAP_PROP_FPS, 30)
+        self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+
+        self.lock = threading.Lock()
+        self.running = True
+        self.frame = None
+        self.sequence = 0
+        self.thread = threading.Thread(target=self._reader, daemon=True)
+        self.thread.start()
+
+    def _reader(self):
+        while self.running:
+            ok, frame = self.cap.read()
+            if not ok:
+                time.sleep(0.008)
+                continue
+            with self.lock:
+                self.frame = frame
+                self.sequence += 1
+
+    def get_latest(self):
+        with self.lock:
+            if self.frame is None:
+                return None, self.sequence
+            return self.frame.copy(), self.sequence
+
+    def close(self):
+        self.running = False
+        try:
+            self.cap.release()
+        except Exception:
+            pass
+        if self.thread.is_alive():
+            self.thread.join(timeout=0.5)
+
+
 class BoxingApp:
     def __init__(self):
         self.root = tk.Tk()
@@ -822,7 +939,7 @@ class BoxingApp:
         self.root.attributes("-topmost", True)
 
         self.screen_w, self.screen_h = get_screen_size()
-        self.panel_w = min(PANEL_W, max(430, int(self.screen_w * 0.28)))
+        self.panel_w = min(PANEL_W, max(350, int(self.screen_w * 0.24)))
         self.panel_h = PANEL_H
 
         panel_x = self.screen_w - self.panel_w - 8
@@ -833,6 +950,7 @@ class BoxingApp:
         self.game_hwnd = None
         self.game_status = "OPENING Y8 GAME..."
         self.last_pose_seq = -1
+        self.last_frame_seq = -1
         self.latest_norm = None
         self.latest_state = {
             "pose_ok": False, "guard": False,
@@ -845,7 +963,7 @@ class BoxingApp:
         self.last_submit_time = 0.0
 
         self._build_ui()
-        self._open_camera()
+        self.camera = self._open_camera()
 
         self.pose_tracker = AsyncPoseTracker()
         self.gesture_engine = BoxingGestureEngine()
@@ -865,7 +983,7 @@ class BoxingApp:
             daemon=True
         ).start()
 
-        self.root.after(15, self.update_frame)
+        self.root.after(20, self.update_frame)
 
     def _build_ui(self):
         header = tk.Frame(self.root, bg="#111827")
@@ -963,25 +1081,12 @@ class BoxingApp:
 
         tk.Label(
             self.root,
-            text="F7 test phim Q | F8 bat/tat | F9 can chinh | F10 thoat",
+            text="F6 an/hien cam | F7 test Q | F8 bat/tat | F9 can chinh | F10 thoat",
             font=("Segoe UI", 8), fg="#94A3B8", bg="#111827"
         ).pack(fill="x", padx=12, pady=(0, 7))
 
     def _open_camera(self):
-        self.cap = cv2.VideoCapture(CAMERA_INDEX, cv2.CAP_DSHOW)
-        if not self.cap.isOpened():
-            self.cap.release()
-            self.cap = cv2.VideoCapture(CAMERA_INDEX)
-
-        if not self.cap.isOpened():
-            raise RuntimeError(
-                "Khong mo duoc webcam. Dong Camera/Zoom/Teams hoac doi CAMERA_INDEX = 1."
-            )
-
-        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, CAMERA_CAPTURE_W)
-        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, CAMERA_CAPTURE_H)
-        self.cap.set(cv2.CAP_PROP_FPS, 30)
-        self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+        return CameraStream(CAMERA_INDEX, CAMERA_CAPTURE_W, CAMERA_CAPTURE_H)
 
     def _game_window_callback(self, hwnd, game_size, error):
         def apply():
@@ -989,8 +1094,9 @@ class BoxingApp:
                 return
             if hwnd:
                 self.game_hwnd = hwnd
-                self.game_status = "Y8 WINDOW FOUND - CLICK GAME TO PLAY"
+                self.game_status = "Y8 OPENED - CHOOSE QUICK MODE"
                 self.game_label.config(text=self.game_status, fg="#4ADE80")
+                self.root.after(500, self.focus_game)
             else:
                 self.game_status = "GAME WINDOW NOT FOUND"
                 self.game_label.config(text=self.game_status, fg="#F87171")
@@ -1007,17 +1113,23 @@ class BoxingApp:
         foreground = USER32.GetForegroundWindow()
         if foreground == self.game_hwnd:
             return True
+        foreground_pid = wintypes.DWORD(0)
+        game_pid = wintypes.DWORD(0)
+        USER32.GetWindowThreadProcessId(foreground, ctypes.byref(foreground_pid))
+        USER32.GetWindowThreadProcessId(self.game_hwnd, ctypes.byref(game_pid))
+        if foreground_pid.value and foreground_pid.value == game_pid.value:
+            return True
         title = window_title(foreground).lower()
-        return "punch boxing championship" in title or (
-            "y8.com" in title and "boxing" in title
+        return ("punch" in title and "boxing" in title) or (
+            "y8" in title and "boxing" in title
         )
 
     def focus_game(self):
         if not self.game_hwnd:
             return False
-        user32 = ctypes.windll.user32
-        user32.ShowWindow(self.game_hwnd, 9)
-        user32.SetForegroundWindow(self.game_hwnd)
+        USER32.ShowWindow(self.game_hwnd, 9)
+        USER32.BringWindowToTop(self.game_hwnd)
+        USER32.SetForegroundWindow(self.game_hwnd)
         return self.is_game_focused()
 
     def _on_hotkey(self, key):
@@ -1027,6 +1139,8 @@ class BoxingApp:
             self.root.after(0, self.toggle_control)
         elif key == pynput_keyboard.Key.f9:
             self.root.after(0, self.recalibrate)
+        elif key == pynput_keyboard.Key.f6:
+            self.root.after(0, self.toggle_panel)
         elif key == pynput_keyboard.Key.f10:
             self.root.after(0, self.close)
 
@@ -1041,6 +1155,16 @@ class BoxingApp:
         else:
             self.control_label.config(text="CONTROL OFF", fg="#FBBF24")
             self.toggle_button.config(text="BAT DIEU KHIEN (F8)", bg="#166534")
+
+    def toggle_panel(self):
+        try:
+            if self.root.state() == "withdrawn":
+                self.root.deiconify()
+                self.root.attributes("-topmost", True)
+            else:
+                self.root.withdraw()
+        except Exception:
+            pass
 
     def recalibrate(self):
         self.gesture_engine.recalibrate()
@@ -1116,28 +1240,31 @@ class BoxingApp:
         if not self.running:
             return
 
-        ok, frame = self.cap.read()
-        if ok:
-            frame = cv2.resize(
-                frame, (PREVIEW_W, PREVIEW_H), interpolation=cv2.INTER_AREA
-            )
-            rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        now = time.perf_counter()
+        frame, frame_seq = self.camera.get_latest()
 
-            now = time.perf_counter()
-            if now - self.last_submit_time >= 1.0 / 30.0:
+        if frame is not None and frame_seq != self.last_frame_seq:
+            self.last_frame_seq = frame_seq
+
+            # Inference receives the 640x360 camera frame; preview is scaled separately.
+            rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            if now - self.last_submit_time >= 1.0 / POSE_TARGET_FPS:
                 self.pose_tracker.submit(rgb)
                 self.last_submit_time = now
 
-            seq, poses, result_time = self.pose_tracker.get_latest()
-            if seq != self.last_pose_seq:
-                self.last_pose_seq = seq
-                timestamp_ms = int(result_time * 1000) if result_time else int(now * 1000)
-                events, state = self.gesture_engine.update(poses, timestamp_ms)
-                self.latest_state = state
-                self.latest_norm = state.get("norm")
+            (
+                pose_seq, poses, pose_timestamp_ms,
+                result_wall_time, latency_ms
+            ) = self.pose_tracker.get_latest()
 
-                if self.control_enabled:
-                    if self.is_game_focused():
+            if pose_seq != self.last_pose_seq:
+                self.last_pose_seq = pose_seq
+                if pose_timestamp_ms:
+                    events, state = self.gesture_engine.update(poses, pose_timestamp_ms)
+                    self.latest_state = state
+                    self.latest_norm = state.get("norm")
+
+                    if self.control_enabled and self.is_game_focused():
                         self.keys.hold("s", state.get("guard", False))
                         if not state.get("guard", False):
                             for action, key in events:
@@ -1148,36 +1275,37 @@ class BoxingApp:
             dt = max(0.001, now - self.last_frame_time)
             self.last_frame_time = now
             instant_fps = 1.0 / dt
-            self.fps = instant_fps if self.fps == 0 else 0.82 * self.fps + 0.18 * instant_fps
+            self.fps = instant_fps if self.fps == 0 else 0.85 * self.fps + 0.15 * instant_fps
 
-            preview = cv2.flip(frame, 1)
+            preview = cv2.resize(
+                frame, (PREVIEW_W, PREVIEW_H), interpolation=cv2.INTER_AREA
+            )
+            preview = cv2.flip(preview, 1)
             if self.latest_norm is not None:
                 self._draw_skeleton(preview, self.latest_norm)
             self._draw_overlay(preview, self.latest_state)
 
             rgb_preview = cv2.cvtColor(preview, cv2.COLOR_BGR2RGB)
-            image = Image.fromarray(rgb_preview)
-            photo = ImageTk.PhotoImage(image=image)
+            photo = ImageTk.PhotoImage(image=Image.fromarray(rgb_preview))
             self.image_label.configure(image=photo, width=PREVIEW_W, height=PREVIEW_H)
             self.image_label.image = photo
 
             quality = self.latest_state.get("quality", "WAITING FOR POSE")
             self.quality_label.config(
-                text=f"CAMERA: {quality} | {self.fps:.0f} FPS",
+                text=f"CAMERA: {quality} | UI {self.fps:.0f} FPS",
                 fg="#4ADE80" if "GOOD" in quality else "#FBBF24"
             )
 
             action = self.latest_state.get("action", "READY")
             key = self.latest_state.get("key", "-")
             pose_status = "POSE OK" if self.latest_state.get("pose_ok") else "POSE LOST"
-
+            focus_text = ""
             if self.control_enabled and not self.is_game_focused():
                 focus_text = " | CLICK GAME - NO KEY SENT"
                 self.game_label.config(text="GAME: CLICK GAME WINDOW TO FOCUS", fg="#FBBF24")
-            else:
-                focus_text = ""
-                if self.game_hwnd:
-                    self.game_label.config(text="GAME: WINDOW FOUND", fg="#4ADE80")
+                self.keys.hold("s", False)
+            elif self.game_hwnd:
+                self.game_label.config(text="GAME OPEN - SELECT QUICK MODE", fg="#4ADE80")
 
             self.action_label.config(
                 text=f"{pose_status} | {action} | KEY {key}{focus_text}"
@@ -1189,16 +1317,16 @@ class BoxingApp:
             right_angle = angles.get("right")
             left_vel = velocities.get("left", (0.0, 0.0, 0.0))
             right_vel = velocities.get("right", (0.0, 0.0, 0.0))
-            if left_angle is None:
-                metric_text = "ELBOW: L -- | R --    WRIST SPEED: waiting..."
-            else:
-                metric_text = (
-                    f"ELBOW L {left_angle:.0f}  R {(right_angle or 0):.0f} deg"
-                    f" | FWD L {left_vel[2]:.1f} R {right_vel[2]:.1f}"
-                )
+            metric_text = (
+                f"ELBOW L {left_angle:.0f} R {right_angle:.0f} deg"
+                if left_angle is not None and right_angle is not None
+                else "ELBOW L -- R --"
+            )
+            metric_text += f" | POSE {latency_ms:.0f} ms"
             self.metrics_label.config(text=metric_text)
 
-        self.root.after(15, self.update_frame)
+        # Camera read and pose inference are on worker threads; Tk only paints latest frame.
+        self.root.after(20, self.update_frame)
 
     def close(self):
         if not self.running:
@@ -1222,7 +1350,7 @@ class BoxingApp:
             pass
 
         try:
-            self.cap.release()
+            self.camera.close()
         except Exception:
             pass
 
