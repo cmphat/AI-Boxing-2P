@@ -3,10 +3,15 @@ chcp 65001 > nul
 cd /d "%~dp0"
 
 if not exist ".venv\Scripts\python.exe" (
-    echo Chua co moi truong .venv. Hay chay setup_y8.bat truoc.
+    echo Chua cai dat. Hay chay setup.bat truoc.
     pause
     exit /b 1
 )
 
-".venv\Scripts\python.exe" y8_controller.py
-pause
+echo Dang khoi dong Y8 Boxing Controller - ban moi...
+".venv\Scripts\python.exe" main.py
+if errorlevel 1 (
+    echo.
+    echo Chuong trinh gap loi. Xem thong bao ben tren.
+    pause
+)
