@@ -1,80 +1,64 @@
-# AI-Boxing-2P — Pose Controller V2
+# AI-Boxing-2P — Y8 Pose Controller (Fast V3)
 
-Ban V2 la bo dieu khien webcam cho Punch Boxing Championship tren Y8. main.py doc lap, khong import game Pygame cu.
+## What this version fixes
 
-## Pipeline xu ly anh
+- Opens the official Punch Boxing Championship page automatically in a dedicated Edge/Chrome app window.
+- Resolves the browser window using its process ID first, with a Y8 page-title fallback. It no longer depends on one exact window title.
+- Gives the game the full desktop viewport. The old split-screen layout could make Y8 display "Your screen is too small to play this game".
+- Floats the camera controller above the game. Press F6 to hide/show the camera panel while keeping the controller active.
+- Uses MediaPipe Pose Landmarker LITE, one tracked person, 640x360 camera input and 24 FPS inference target.
+- Reads webcam frames on a separate worker thread, so the Tk UI is not blocked by camera reads.
+- Filters only the nine landmarks used by boxing, with faster One Euro settings to reduce visible skeleton delay.
+- Displays actual pose-inference latency in milliseconds.
 
-Webcam -> OpenCV -> MediaPipe Pose Landmarker FULL -> 3D landmarks -> body-relative coordinates -> temporal velocity -> gesture state machine -> Win32 SendInput -> Y8.
+## Requirements
 
-## Diem moi
+- Windows 10/11 64-bit
+- Python 3.11 64-bit
+- Webcam
+- Microsoft Edge or Google Chrome recommended
 
-- Dung model Pose Landmarker FULL thay cho LITE.
-- MediaPipe LIVE_STREAM chay bat dong bo de khong lam dung khung hinh camera.
-- Theo doi toi da 2 pose va uu tien nguoi gan camera/co vai ro nhat.
-- Hien skeleton vai, khuyu, co tay, dau va than tren preview.
-- Dung world landmarks 3D va toa do tuong doi theo chieu rong vai.
-- Tinh van toc tren cua so thoi gian ngan, khong lay sai khac 1 frame don le.
-- State machine bat buoc rut tay ve truoc khi nhan cu dam tiep theo.
-- Dung Win32 SendInput de gui phim, co test Q va kiem tra cua so game dang focus.
-- Cua so camera nho, Always on Top, nam ben phai; game duoc ep ve ben trai.
+## First run
 
-## Cai dat
+1. Extract the ZIP.
+2. Double-click run.bat.
+3. On first run, it automatically creates .venv, installs dependencies and downloads the LITE pose model.
+4. It then opens the Y8 game and the camera controller.
 
-Windows 10/11, Python 3.11 64-bit, webcam, Edge/Chrome hoac Firefox.
+You can also run setup.bat once manually, then use run.bat for later launches.
 
-1. Tai ZIP va giai nen.
-2. Chay setup.bat (tai model FULL, co the mat vai phut).
-3. Chay run.bat.
+## Play
 
-## Cach choi
+1. Wait for the Y8 page to load.
+2. Choose Quick Mode in the game. The controller does not auto-click the game's menu; this avoids clicking the wrong UI state.
+3. Click the game area once to give it keyboard focus.
+4. Press F8 or click the enable-control button.
+5. Perform punches in front of the camera.
 
-1. Game Punch Boxing Championship mo o ben trai.
-2. Chon Quick Mode va bat dau tran.
-3. Dat webcam cach nguoi khoang 1.5-2.5 m. Khung hinh can thay dau, vai, khuyu tay, co tay va toi thieu den eo.
-4. Chi de mot nguoi trong khung hinh. Neu co nguoi khac dung gan camera hon, model co the chon nham nguoi.
-5. Dung thang, hai tay tha long trong 1 giay de lay moc dau.
-6. Click vao vung game.
-7. Nhan F8 hoac nut BAT DIEU KHIEN. Khi dang bat, game phai la cua so duoc focus.
-
-## Mapping
-
-- Tay trai dam thang/cross: Q
-- Tay phai dam thang/cross: A
-- Uppercut trai: Y
-- Uppercut phai: W
-- Hook trai: T
-- Hook phai: E
-- Overhand trai: I
-- Overhand phai: U
-- Hai tay dua len bao dau: giu S
-- Nghieng dau sang ben: D
+The game opens maximized so Y8 receives a full-width desktop viewport. The camera panel floats above the game. Press F6 to hide/show the panel if it covers part of the game.
 
 ## Hotkeys
 
-- F7: test gui phim Q vao game.
-- F8: bat/tat dieu khien.
-- F9: can chinh lai moc dau.
-- F10: thoat.
+- F6: hide/show camera panel
+- F7: test Q key (game must be focused)
+- F8: enable/disable motion control
+- F9: recalibrate neutral pose
+- F10: exit
 
-## Cach doc trang thai
+The blue MO LAI Y8 GAME button retries the game launch if the browser was closed.
 
-- GOOD FRAMING: khung hinh co ban dat yeu cau.
-- STEP BACK: nguoi dang qua gan camera.
-- KEEP BOTH HANDS INSIDE FRAME: co tay ra ngoai khung.
-- SHOW BOTH ARMS: landmark vai/khuyu/co tay chua ro.
-- CLICK GAME: game chua duoc focus, controller se khong gui phim vao ung dung khac.
+## Performance
 
-## Tinh chinh
+- Pose model: LITE
+- Pose count: 1
+- Camera input: 640x360
+- Inference target: 24 FPS
+- Camera capture: independent worker thread
+- Pose latency is shown in the camera panel
 
-Trong main.py:
-- PUNCH_COOLDOWN: thoi gian chong lap.
-- PUNCH_MIN_ANGLE: nguong duoi khuyu.
-- forward_speed > 0.32: nguong tien ve camera cho cross.
-- CAMERA_INDEX: doi 0 thanh 1 neu webcam khong phai camera mac dinh.
+## Troubleshooting
 
-Luu y: Pose estimation phu thuoc goc camera, anh sang va viec co du ca hai tay trong khung. Nen test F7 truoc; neu Q khong tao cu dam thi can kiem tra focus/game key mapping truoc khi tinh chinh pose.
-
-
-## Live diagnostics (V2.1)
-
-Camera panel hien them goc khuyu tay trai/phai va toc do tien ve cua co tay. Dung cac chi so nay de kiem tra model co dang theo doi duoc hai canh tay truoc khi bat dieu khien. Phim F7 chi test duong gui ban phim, khong test pose recognition.
+- If Y8 does not open, press MO LAI Y8 GAME. If it still fails, check Edge/Chrome installation and network access to Y8.
+- If Y8 says the screen is too small, keep the game maximized and hide the camera panel with F6.
+- If F7 does not punch, click the game area and test again.
+- If the camera is black, close other apps using the webcam or change CAMERA_INDEX in main.py.
