@@ -804,6 +804,13 @@ class BoxingApp:
         )
         self.action_label.pack(fill="x", padx=12, pady=2)
 
+        self.metrics_label = tk.Label(
+            self.root, text="ELBOW: L -- | R --    WRIST SPEED: L -- | R --",
+            font=("Consolas", 8),
+            fg="#93C5FD", bg="#111827"
+        )
+        self.metrics_label.pack(fill="x", padx=12, pady=(0, 2))
+
         self.game_label = tk.Label(
             self.root, text="GAME: OPENING...",
             font=("Segoe UI", 8),
@@ -1078,6 +1085,21 @@ class BoxingApp:
             self.action_label.config(
                 text=f"{pose_status} | {action} | KEY {key}{focus_text}"
             )
+
+            angles = self.latest_state.get("angles", {})
+            velocities = self.latest_state.get("velocities", {})
+            left_angle = angles.get("left")
+            right_angle = angles.get("right")
+            left_vel = velocities.get("left", (0.0, 0.0, 0.0))
+            right_vel = velocities.get("right", (0.0, 0.0, 0.0))
+            if left_angle is None:
+                metric_text = "ELBOW: L -- | R --    WRIST SPEED: waiting..."
+            else:
+                metric_text = (
+                    f"ELBOW L {left_angle:.0f}  R {(right_angle or 0):.0f} deg"
+                    f" | FWD L {left_vel[2]:.1f} R {right_vel[2]:.1f}"
+                )
+            self.metrics_label.config(text=metric_text)
 
         self.root.after(15, self.update_frame)
 
