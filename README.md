@@ -73,3 +73,8 @@ Trong main.py:
 - CAMERA_INDEX: doi 0 thanh 1 neu webcam khong phai camera mac dinh.
 
 Luu y: Pose estimation phu thuoc goc camera, anh sang va viec co du ca hai tay trong khung. Nen test F7 truoc; neu Q khong tao cu dam thi can kiem tra focus/game key mapping truoc khi tinh chinh pose.
+
+
+## Live diagnostics (V2.1)
+
+Camera panel hien them goc khuyu tay trai/phai va toc do tien ve cua co tay. Dung cac chi so nay de kiem tra model co dang theo doi duoc hai canh tay truoc khi bat dieu khien. Phim F7 chi test duong gui ban phim, khong test pose recognition.
