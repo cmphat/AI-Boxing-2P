@@ -8,5 +8,10 @@ if not exist ".venv\Scripts\python.exe" (
     exit /b 1
 )
 
+echo Dang khoi dong Y8 Boxing Controller - ban moi...
 ".venv\Scripts\python.exe" main.py
-pause
+if errorlevel 1 (
+    echo.
+    echo Chuong trinh gap loi. Xem thong bao ben tren.
+    pause
+)
