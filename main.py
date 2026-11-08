@@ -300,6 +300,8 @@ USER32.SetWindowPos.argtypes = [
     ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, wintypes.UINT
 ]
 USER32.SetWindowPos.restype = wintypes.BOOL
+USER32.BringWindowToTop.argtypes = [wintypes.HWND]
+USER32.BringWindowToTop.restype = wintypes.BOOL
 USER32.GetForegroundWindow.argtypes = []
 USER32.GetForegroundWindow.restype = wintypes.HWND
 USER32.SetForegroundWindow.argtypes = [wintypes.HWND]
