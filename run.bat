@@ -3,11 +3,21 @@ chcp 65001 > nul
 cd /d "%~dp0"
 
 if not exist ".venv\Scripts\python.exe" (
-    echo Chua setup. Hay chay setup.bat truoc.
-    pause
-    exit /b 1
+    echo Chua co moi truong Python. Dang tu cai dat...
+    call setup.bat
+    if errorlevel 1 exit /b 1
 )
 
+if not exist "assets\pose_landmarker_lite.task" (
+    echo Dang tai model Pose LITE...
+    ".venv\Scripts\python.exe" download_model.py
+    if errorlevel 1 (
+        pause
+        exit /b 1
+    )
+)
+
+echo Dang mo AI Boxing va tu dong mo Y8...
 ".venv\Scripts\python.exe" main.py
 if errorlevel 1 (
     echo.
