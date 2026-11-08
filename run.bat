@@ -8,6 +8,13 @@ if not exist ".venv\Scripts\python.exe" (
     if errorlevel 1 exit /b 1
 )
 
+".venv\Scripts\python.exe" -c "import cv2, mediapipe, PIL, pynput" > nul 2>&1
+if errorlevel 1 (
+    echo Thieu thu vien. Dang cai bo phu thuoc...
+    call setup.bat
+    if errorlevel 1 exit /b 1
+)
+
 if not exist "assets\pose_landmarker_lite.task" (
     echo Dang tai model Pose LITE...
     ".venv\Scripts\python.exe" download_model.py
