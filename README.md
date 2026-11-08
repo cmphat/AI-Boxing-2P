@@ -1,81 +1,139 @@
 # AI-Boxing-2P
 
-Game boxing 2D cho mon Xu ly anh. Nguoi choi dieu khien nhan vat bang cu dong truoc webcam, su dung OpenCV, MediaPipe Pose Landmarker va Pygame.
+Do an mon Xu ly anh: dieu khien game boxing bang cu dong co the tu webcam.
 
-## Game modes
+## Huong phat trien hien tai: Y8 Pose Controller
 
-### PVE - Player vs Bot
-- Mot nguoi choi dieu khien bang webcam.
-- Bot tu dong tan cong va phong thu theo state machine.
-- Co 3 muc do: Easy, Normal, Hard.
-- Do kho thay doi tan suat tan cong, sat thuong va xac suat guard.
+Thay vi tu viet lai mot game boxing, project dung **Punch Boxing Championship** tren Y8 lam moi truong mo phong 3D:
 
-### PVP - Player vs Player
-- Hai nguoi cung dung truoc mot webcam.
-- Player 1 dung ben trai; Player 2 dung ben phai.
-- Ca hai nguoi deu duoc nhan dien pose va gesture bang MediaPipe.
+https://vi.y8.com/games/punch_boxing_championship
 
-## Requirements
-- Windows 10/11 64-bit.
-- Python 3.11 64-bit.
-- Webcam va ket noi Internet trong lan cai dat dau tien.
+Pipeline:
 
-Tai Python: https://www.python.org/downloads/
-Khi cai dat Python, chon **Add Python to PATH**.
+```text
+Webcam
+  -> OpenCV
+  -> MediaPipe Pose Landmarker
+  -> EMA smoothing
+  -> Gesture state machine
+  -> Boxing action
+  -> pynput keyboard event
+  -> Y8 Punch Boxing Championship
+```
 
-## Setup
-1. Tai repository bang nut Code > Download ZIP va giai nen.
-2. Mo thu muc project.
-3. Chay setup.bat.
-4. Cho den khi cac thu vien va model MediaPipe duoc cai xong.
-5. Chay run.bat.
+Game Y8 chi nhan keyboard o cua so dang focus. Python khong sua game va khong can truy cap source cua Y8; no chi bien cu dong webcam thanh phim bam nhu mot bo dieu khien ngoai.
 
-## Controls
-### Main menu
-- 1: PVE (Player vs Bot).
-- 2: PVP (Player vs Player).
-- E: Bot Easy.
-- N: Bot Normal.
-- H: Bot Hard.
-- ESC: Thoat.
+## Mapping dong tac
 
-### During a match
-- Dua tay ra truoc nhanh va duoi khuyu tay de Punch.
-- Dua ca hai co tay len cao gan/vuot vai de Guard.
-- A: test punch Player 1.
-- L: test punch Player 2 (chi dung trong PVP).
-- R: Choi lai.
-- M: Quay ve menu.
-- ESC: Thoat.
+| Dong tac nguoi choi | Phim game |
+|---|---|
+| Dam thang tay trai | Q |
+| Dam thang tay phai | A |
+| Uppercut trai | Y |
+| Uppercut phai | W |
+| Hook trai | T |
+| Hook phai | E |
+| Overhand trai | I |
+| Overhand phai | U |
+| Dua hai tay len che mat | giu S - Block |
+| Nghieng/luon dau sang ben | D - Dodge |
 
-## Source layout
-- main.py: webcam, OpenCV frame processing va game loop.
-- pose_tracker.py: MediaPipe Pose, gan nguoi choi va nhan dien Punch/Guard.
-- boxing_game.py: menu, PVE/PVP, bot AI, HP, timer va giao dien 2D.
-- download_model.py: tai model Pose Landmarker Lite.
-- requirements.txt: cac thu vien Python.
-- setup.bat: cai dat tu dong tren Windows.
-- run.bat: khoi dong game.
+Game goc su dung Q/A cho cross punch, W/Z cho right uppercut, Y left uppercut, E right hook, T left hook, U/I overhand, D dodge va S block.
 
-## Image-processing pipeline
-1. OpenCV thu frame webcam, mirror, resize va chuyen BGR sang RGB.
-2. MediaPipe Pose Landmarker phat hien toi da hai bo landmark.
-3. Trong PVP, hai nguoi duoc sap xep trai-phai. Trong PVE, nguoi duy nhat luon duoc gan cho Player 1.
-4. He thong theo doi vai, khuyu tay va co tay.
-5. Goc khuyu tay va van toc co tay tao heuristic Punch; vi tri hai co tay tao heuristic Guard.
-6. Game engine nhan gesture va cap nhat nhan vat, mau, timer va ket qua.
-7. Trong PVE, Bot AI su dung state machine don gian de chon tan cong hoac phong thu.
+## Vi sao controller nay it nhan nham hon
 
-## Gesture recognition notes
-Punch hien tai la heuristic dua tren goc khuyu tay, van toc co tay, re-arm va cooldown; day khong phai classifier boxing duoc huan luyen rieng. Nguong co the can tinh chinh theo webcam, anh sang, khoang cach va goc dung.
+Controller khong bam phim ngay khi thay co tay di chuyen. Moi frame duoc xu ly qua:
 
-Bot hien tai la AI theo luat/state machine, khong phai neural network. Ba muc do dieu chinh tan suat tan cong, sat thuong va xac suat phong thu.
+1. **EMA landmark smoothing** de giam rung.
+2. **Visibility gate**: chi nhan khi vai, khuyu va co tay du ro.
+3. **Arm state machine**: tay phai co lai/re-arm truoc khi ghi nhan cu dam tiep theo.
+4. **Velocity + elbow extension**: phai vua du nhanh vua duoi tay.
+5. **Per-arm cooldown**: ngan mot cu dam bi tinh nhieu lan.
+6. **Guard priority**: khi dang block thi punch bi khoa.
+7. **Dodge hysteresis**: phai tro ve trung tam moi co the dodge lan tiep.
 
-## Troubleshooting
-- Khong mo duoc webcam: dong Zoom/Teams/OBS; thu doi CAMERA_INDEX = 0 thanh 1 trong main.py.
-- Khong tim thay model: chay python download_model.py trong virtual environment.
-- Loi thu vien: dung Python 3.11 64-bit va chay lai setup.bat.
-- Chi nhan dien mot nguoi trong PVP: tang anh sang, dung cach nhau va dam bao khong che khuat vai/khuu/co tay.
+## Cai dat Windows
 
-## Safety
-Day la game dieu khien bang cu dong, khong phai bai tap boxing that. Khong dam vao nguoi choi khac; giu khoang trong an toan va dung lai neu met hoac chong mat.
+Khuyen dung Windows 10/11 64-bit va Python 3.11 64-bit.
+
+### Cach nhanh
+
+1. Clone/download repository.
+2. Chay:
+
+```bat
+setup_y8.bat
+```
+
+Script se:
+- tao `.venv`
+- cai OpenCV, MediaPipe, pynput...
+- tai Pose Landmarker model.
+
+3. Sau khi xong, chay:
+
+```bat
+run_y8_controller.bat
+```
+
+Controller se tu mo trang game Y8.
+
+## Cach choi
+
+1. Trong browser, vao Quick Mode/Tournament/Career va bat dau tran dau bang chuot.
+2. Dat webcam sao cho thay **dau, hai vai, hai khuyu tay va hai co tay**.
+3. Dung cach webcam khoang 1.5-2.5 m tuy goc camera.
+4. Cho debug hien `POSE: OK`.
+5. Dung tu the binh thuong mot luc de controller lay neutral pose.
+6. Click vao khung game Y8 de game nhan keyboard.
+7. Bam **F8** de bat dieu khien pose.
+8. Bat dau dam / block / dodge.
+
+### Hotkeys controller
+
+| Phim | Chuc nang |
+|---|---|
+| F8 | Bat/tat gui phim vao game |
+| F9 | Recalibrate neutral pose |
+| F10 | Thoat controller |
+
+> Khi control ON, hay de browser/game la cua so dang focus. Cua so webcam chi de debug.
+
+## File moi cho Y8 controller
+
+```text
+gesture_engine.py       # MediaPipe + smoothing + gesture classifier
+key_output.py           # gui tap/hold keyboard an toan
+y8_controller.py        # webcam loop + debug + mo Y8
+setup_y8.bat            # cai dat tren Windows
+run_y8_controller.bat   # chay controller
+download_model.py       # tai pose model
+assets/                 # model duoc tai vao day
+```
+
+## Source game cu
+
+Cac file `main.py`, `boxing_game.py`, `pose_tracker.py`... van duoc giu trong repository de tham khao va so sanh. Huong demo de nop mon nen dung **Y8 Pose Controller**.
+
+## Tinh chinh do nhay
+
+Trong `gesture_engine.py`, cac nguong chinh gom:
+
+- arm cooldown: `0.34 s`
+- elbow extension: `> 146 deg`
+- punch speed: `> 1.55` shoulder-width / second
+- dodge lean: `> 0.34` shoulder-width
+
+Neu bi tu dam:
+- tang punch speed threshold.
+- tang elbow extension threshold.
+
+Neu dam that nhung kho nhan:
+- giam punch speed threshold tung chut.
+- dung xa camera hon de thay tron canh tay.
+
+Khong nen giam cooldown qua thap vi mot cu dam co the tao nhieu key event.
+
+## Luu y
+
+Day la controller phuc vu demo xu ly anh. Khong dam vao nguoi khac, giu khoang trong xung quanh khi choi.
