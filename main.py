@@ -612,11 +612,8 @@ class BoxingGestureEngine:
                 history = self.histories[side]
                 history.append(sample)
 
-                old = None
-                for candidate in history:
-                    if now - candidate[0] >= 0.085:
-                        old = candidate
-                        break
+                eligible = [candidate for candidate in history if 0.075 <= now - candidate[0] <= 0.19]
+                old = min(eligible, key=lambda candidate: abs((now - candidate[0]) - 0.12)) if eligible else None
 
                 if old is None:
                     angles[side] = angle
@@ -677,10 +674,17 @@ class BoxingGestureEngine:
                 ):
                     action, key = f"{side.upper()} CROSS", cross_key
 
-                # Fallback for a clear fast extension when depth estimation is noisy.
+                # Straight punch: depth movement is the primary cue.
                 elif (
-                    angle > 153 and angle_delta > 17
-                    and speed_2d > 1.65
+                    angle > 138 and forward_speed > 0.38
+                    and speed_2d > 0.65
+                ):
+                    action, key = f"{side.upper()} CROSS", cross_key
+
+                # Fallback for a fast full extension when depth estimation is noisy.
+                elif (
+                    angle > 153 and angle_delta > 12
+                    and speed_2d > 1.35
                 ):
                     action, key = f"{side.upper()} CROSS", cross_key
 
@@ -949,15 +953,15 @@ class BoxingApp:
         self.focus_game()
 
         def send_test():
-            if not self.keys.enabled:
+            was_enabled = self.keys.enabled
+            if not was_enabled:
                 self.keys.set_enabled(True)
-                self.keys.tap(key, require_focus=False)
-                self.keys.set_enabled(False)
-            else:
-                self.keys.tap(key, require_focus=False)
-            self.action_label.config(text=f"KEYBOARD TEST SENT: {key.upper()}")
+            sent = self.keys.tap(key, duration=0.11, require_focus=False)
+            self.action_label.config(text=f"KEY TEST {key.upper()}: {'SENT' if sent else 'FAILED'}")
+            if not was_enabled:
+                self.root.after(180, lambda: self.keys.set_enabled(False))
 
-        self.root.after(220, send_test)
+        self.root.after(250, send_test)
 
     def _draw_skeleton(self, frame, norm):
         h, w = frame.shape[:2]
