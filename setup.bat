@@ -3,7 +3,7 @@ chcp 65001 > nul
 cd /d "%~dp0"
 
 echo ============================================================
-echo AI BOXING - SETUP CONTROLLER V2
+echo AI BOXING - SETUP FAST LITE CONTROLLER
 echo ============================================================
 
 py -3.11 --version > nul 2>&1
@@ -26,6 +26,11 @@ if not exist ".venv\Scripts\python.exe" (
 
 echo [1/3] Update pip...
 ".venv\Scripts\python.exe" -m pip install --upgrade pip
+if errorlevel 1 (
+    echo Loi cap nhat pip.
+    pause
+    exit /b 1
+)
 
 echo [2/3] Install packages...
 ".venv\Scripts\python.exe" -m pip install -r requirements.txt
@@ -35,7 +40,7 @@ if errorlevel 1 (
     exit /b 1
 )
 
-echo [3/3] Download Pose Landmarker FULL...
+echo [3/3] Download Pose Landmarker LITE (fast model)...
 ".venv\Scripts\python.exe" download_model.py
 if errorlevel 1 (
     pause
@@ -43,5 +48,5 @@ if errorlevel 1 (
 )
 
 echo.
-echo SETUP HOAN TAT. Chay run.bat.
+echo SETUP HOAN TAT. Chay run.bat de mo game va camera.
 pause
