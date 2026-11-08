@@ -474,6 +474,38 @@ def select_primary_pose(poses, previous_center=None):
 
 # ------------------------- BOXING GESTURE RECOGNITION -------------------------
 
+class OneEuroFilter:
+    """Adaptive low-pass filter: smooths idle landmarks but reacts faster to punches."""
+
+    def __init__(self, min_cutoff=1.6, beta=0.12, derivative_cutoff=1.0):
+        self.min_cutoff = min_cutoff
+        self.beta = beta
+        self.derivative_cutoff = derivative_cutoff
+        self.x_previous = None
+        self.dx_previous = 0.0
+
+    @staticmethod
+    def _alpha(cutoff, dt):
+        tau = 1.0 / (2.0 * math.pi * cutoff)
+        return 1.0 / (1.0 + tau / max(dt, 1e-4))
+
+    def filter(self, value, dt):
+        if self.x_previous is None:
+            self.x_previous = value
+            return value
+
+        dx = (value - self.x_previous) / max(dt, 1e-4)
+        alpha_d = self._alpha(self.derivative_cutoff, dt)
+        dx_hat = alpha_d * dx + (1.0 - alpha_d) * self.dx_previous
+        cutoff = self.min_cutoff + self.beta * abs(dx_hat)
+        alpha_x = self._alpha(cutoff, dt)
+        x_hat = alpha_x * value + (1.0 - alpha_x) * self.x_previous
+
+        self.x_previous = x_hat
+        self.dx_previous = dx_hat
+        return x_hat
+
+
 def point_distance(a, b):
     return math.sqrt(
         (a[0] - b[0]) ** 2 +
@@ -518,6 +550,35 @@ class BoxingGestureEngine:
         self.last_action = "READY"
         self.last_key = "-"
         self.last_event_time = 0.0
+        self.filter_time = None
+        self.filter_center = None
+        self.norm_filters = self._new_filters()
+        self.world_filters = self._new_filters()
+
+    @staticmethod
+    def _new_filters():
+        return [[OneEuroFilter() for _ in range(3)] for _ in range(33)]
+
+    def _reset_filters(self):
+        self.filter_time = None
+        self.norm_filters = self._new_filters()
+        self.world_filters = self._new_filters()
+
+    def _smooth_pose(self, norm, world, now, center_x):
+        if self.filter_center is not None and abs(center_x - self.filter_center) > 0.22:
+            self._reset_filters()
+
+        dt = 1.0 / 30.0 if self.filter_time is None else max(
+            0.008, min(0.12, now - self.filter_time)
+        )
+        for i in range(min(33, len(norm), len(world))):
+            for axis in range(3):
+                norm[i][axis] = self.norm_filters[i][axis].filter(norm[i][axis], dt)
+                world[i][axis] = self.world_filters[i][axis].filter(world[i][axis], dt)
+
+        self.filter_time = now
+        self.filter_center = center_x
+        return norm, world
 
     def recalibrate(self):
         self.last_head_samples.clear()
@@ -541,6 +602,8 @@ class BoxingGestureEngine:
         selected = self._choose_pose(poses)
 
         if selected is None:
+            self._reset_filters()
+            self.filter_center = None
             if time.perf_counter() - self.last_pose_time > 0.35:
                 self.last_action = "NO PERSON"
                 self.last_key = "-"
@@ -553,6 +616,9 @@ class BoxingGestureEngine:
 
         norm, world = selected
         self.last_pose_time = time.perf_counter()
+
+        raw_center_x = (norm[L_SHOULDER][0] + norm[R_SHOULDER][0]) / 2.0
+        norm, world = self._smooth_pose(norm, world, now, raw_center_x)
 
         required = [NOSE, L_SHOULDER, R_SHOULDER, L_ELBOW, R_ELBOW, L_WRIST, R_WRIST]
         min_vis = min(norm[i][3] for i in required)
