@@ -587,6 +587,7 @@ class BoxingGestureEngine:
         self.armed = {"left": True, "right": True}
         self.histories["left"].clear()
         self.histories["right"].clear()
+        self._reset_filters()
         self.last_action = "CALIBRATING"
 
     def _choose_pose(self, poses):
@@ -604,6 +605,7 @@ class BoxingGestureEngine:
         if selected is None:
             self._reset_filters()
             self.filter_center = None
+            self.previous_center = None
             if time.perf_counter() - self.last_pose_time > 0.35:
                 self.last_action = "NO PERSON"
                 self.last_key = "-"
