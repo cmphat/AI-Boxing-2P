@@ -3,14 +3,14 @@ chcp 65001 > nul
 cd /d "%~dp0"
 
 echo ============================================================
-echo AI BOXING - CAI DAT BAN Y8 CONTROLLER MOI
+echo AI BOXING - SETUP CONTROLLER V2
 echo ============================================================
 
 py -3.11 --version > nul 2>&1
 if errorlevel 1 (
-    echo Khong tim thay Python 3.11 64-bit.
-    echo Cai Python 3.11 tu https://www.python.org/downloads/
-    echo Nho tick Add Python to PATH.
+    echo Python 3.11 64-bit chua duoc cai dat.
+    echo Tai tai: https://www.python.org/downloads/
+    echo Khi cai dat hay tick Add Python to PATH.
     pause
     exit /b 1
 )
@@ -18,24 +18,24 @@ if errorlevel 1 (
 if not exist ".venv\Scripts\python.exe" (
     py -3.11 -m venv .venv
     if errorlevel 1 (
-        echo Tao moi truong ao that bai.
+        echo Khong tao duoc virtual environment.
         pause
         exit /b 1
     )
 )
 
-echo [1/3] Nang cap pip...
+echo [1/3] Update pip...
 ".venv\Scripts\python.exe" -m pip install --upgrade pip
 
-echo [2/3] Cai thu vien...
+echo [2/3] Install packages...
 ".venv\Scripts\python.exe" -m pip install -r requirements.txt
 if errorlevel 1 (
-    echo Cai thu vien that bai.
+    echo Loi cai thu vien. Kiem tra Internet va Python 3.11 64-bit.
     pause
     exit /b 1
 )
 
-echo [3/3] Tai model MediaPipe...
+echo [3/3] Download Pose Landmarker FULL...
 ".venv\Scripts\python.exe" download_model.py
 if errorlevel 1 (
     pause
@@ -43,5 +43,5 @@ if errorlevel 1 (
 )
 
 echo.
-echo CAI DAT HOAN TAT. Bam run.bat de mo game.
+echo SETUP HOAN TAT. Chay run.bat.
 pause
