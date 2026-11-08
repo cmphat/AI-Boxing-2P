@@ -951,6 +951,7 @@ class BoxingApp:
         self.control_enabled = False
         self.game_hwnd = None
         self.game_status = "OPENING Y8 GAME..."
+        self.launching_game = True
         self.last_pose_seq = -1
         self.last_frame_seq = -1
         self.latest_norm = None
@@ -1035,6 +1036,15 @@ class BoxingApp:
         )
         self.game_label.pack(fill="x", padx=12, pady=2)
 
+        tk.Button(
+            self.root, text="MO LAI Y8 GAME",
+            command=self.retry_game,
+            bg="#1D4ED8", fg="white",
+            activebackground="#2563EB", activeforeground="white",
+            relief="flat", font=("Segoe UI", 9, "bold"),
+            padx=7, pady=5
+        ).pack(fill="x", padx=12, pady=(3, 2))
+
         buttons = tk.Frame(self.root, bg="#111827")
         buttons.pack(fill="x", padx=12, pady=(6, 3))
 
@@ -1094,6 +1104,7 @@ class BoxingApp:
         def apply():
             if not self.running:
                 return
+            self.launching_game = False
             if hwnd:
                 self.game_hwnd = hwnd
                 self.game_status = "Y8 OPENED - CHOOSE QUICK MODE"
@@ -1108,6 +1119,17 @@ class BoxingApp:
             self.root.after(0, apply)
         except Exception:
             pass
+
+    def retry_game(self):
+        if self.launching_game:
+            return
+        self.launching_game = True
+        self.game_label.config(text="GAME: OPENING Y8...", fg="#FBBF24")
+        threading.Thread(
+            target=launch_or_find_game,
+            args=(self.screen_w, self.screen_h, self.panel_w, self._game_window_callback),
+            daemon=True
+        ).start()
 
     def is_game_focused(self):
         if not self.game_hwnd:
