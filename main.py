@@ -953,10 +953,13 @@ class BoxingApp:
         self.focus_game()
 
         def send_test():
+            if not self.is_game_focused():
+                self.game_label.config(text="TEST FAILED: CLICK THE GAME WINDOW FIRST", fg="#F87171")
+                return
             was_enabled = self.keys.enabled
             if not was_enabled:
                 self.keys.set_enabled(True)
-            sent = self.keys.tap(key, duration=0.11, require_focus=False)
+            sent = self.keys.tap(key, duration=0.11, require_focus=True)
             self.action_label.config(text=f"KEY TEST {key.upper()}: {'SENT' if sent else 'FAILED'}")
             if not was_enabled:
                 self.root.after(180, lambda: self.keys.set_enabled(False))
