@@ -2,34 +2,35 @@
 chcp 65001 > nul
 cd /d "%~dp0"
 
-echo ==============================================
-echo AI BOXING - SETUP
-echo ==============================================
+echo ============================================================
+echo AI BOXING - CAI DAT BAN Y8 CONTROLLER MOI
+echo ============================================================
 
 py -3.11 --version > nul 2>&1
 if errorlevel 1 (
     echo Khong tim thay Python 3.11 64-bit.
-    echo Cai Python tu https://www.python.org/downloads/
+    echo Cai Python 3.11 tu https://www.python.org/downloads/
     echo Nho tick Add Python to PATH.
     pause
     exit /b 1
 )
 
 if not exist ".venv\Scripts\python.exe" (
-    echo [1/3] Tao moi truong ao...
     py -3.11 -m venv .venv
     if errorlevel 1 (
-        echo Tao virtual environment that bai.
+        echo Tao moi truong ao that bai.
         pause
         exit /b 1
     )
 )
 
-echo [2/3] Cai thu vien...
+echo [1/3] Nang cap pip...
 ".venv\Scripts\python.exe" -m pip install --upgrade pip
+
+echo [2/3] Cai thu vien...
 ".venv\Scripts\python.exe" -m pip install -r requirements.txt
 if errorlevel 1 (
-    echo Cai thu vien that bai. Kiem tra Internet va thu lai.
+    echo Cai thu vien that bai.
     pause
     exit /b 1
 )
@@ -42,5 +43,5 @@ if errorlevel 1 (
 )
 
 echo.
-echo SETUP HOAN TAT. Chay run.bat de mo game.
+echo CAI DAT HOAN TAT. Bam run.bat de mo game.
 pause
