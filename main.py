@@ -14,6 +14,7 @@ from pathlib import Path
 from ctypes import wintypes
 
 import ctypes
+USER32 = ctypes.WinDLL("user32", use_last_error=True)
 import cv2
 import mediapipe as mp
 from mediapipe.tasks import python as mp_python
@@ -70,7 +71,7 @@ POSE_CONNECTIONS = [
 
 def set_dpi_awareness():
     try:
-        ctypes.windll.user32.SetProcessDPIAware()
+        USER32.SetProcessDPIAware()
     except Exception:
         pass
 
@@ -79,7 +80,7 @@ set_dpi_awareness()
 
 
 def get_screen_size():
-    user32 = ctypes.windll.user32
+    user32 = USER32
     return int(user32.GetSystemMetrics(0)), int(user32.GetSystemMetrics(1))
 
 
@@ -237,6 +238,34 @@ class INPUT(ctypes.Structure):
     _fields_ = [("type", wintypes.DWORD), ("ii", INPUT_UNION)]
 
 
+# Declare pointer-sized Win32 signatures explicitly (important on 64-bit Windows).
+USER32.SetProcessDPIAware.argtypes = []
+USER32.SetProcessDPIAware.restype = wintypes.BOOL
+USER32.GetSystemMetrics.argtypes = [ctypes.c_int]
+USER32.GetSystemMetrics.restype = ctypes.c_int
+USER32.GetWindowTextLengthW.argtypes = [wintypes.HWND]
+USER32.GetWindowTextLengthW.restype = ctypes.c_int
+USER32.GetWindowTextW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
+USER32.GetWindowTextW.restype = ctypes.c_int
+USER32.IsWindowVisible.argtypes = [wintypes.HWND]
+USER32.IsWindowVisible.restype = wintypes.BOOL
+USER32.EnumWindows.argtypes = [ctypes.c_void_p, wintypes.LPARAM]
+USER32.EnumWindows.restype = wintypes.BOOL
+USER32.ShowWindow.argtypes = [wintypes.HWND, ctypes.c_int]
+USER32.ShowWindow.restype = wintypes.BOOL
+USER32.SetWindowPos.argtypes = [
+    wintypes.HWND, wintypes.HWND,
+    ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, wintypes.UINT
+]
+USER32.SetWindowPos.restype = wintypes.BOOL
+USER32.GetForegroundWindow.argtypes = []
+USER32.GetForegroundWindow.restype = wintypes.HWND
+USER32.SetForegroundWindow.argtypes = [wintypes.HWND]
+USER32.SetForegroundWindow.restype = wintypes.BOOL
+USER32.SendInput.argtypes = [wintypes.UINT, ctypes.POINTER(INPUT), ctypes.c_int]
+USER32.SendInput.restype = wintypes.UINT
+
+
 INPUT_KEYBOARD = 1
 KEYEVENTF_KEYUP = 0x0002
 
@@ -263,7 +292,7 @@ class WindowsKeySender:
                 )
             )
         )
-        sent = ctypes.windll.user32.SendInput(
+        sent = USER32.SendInput(
             1, ctypes.byref(packet), ctypes.sizeof(INPUT)
         )
         return sent == 1
@@ -907,7 +936,7 @@ class BoxingApp:
     def is_game_focused(self):
         if not self.game_hwnd:
             return False
-        foreground = ctypes.windll.user32.GetForegroundWindow()
+        foreground = USER32.GetForegroundWindow()
         if foreground == self.game_hwnd:
             return True
         title = window_title(foreground).lower()
