@@ -137,3 +137,23 @@ Khong nen giam cooldown qua thap vi mot cu dam co the tao nhieu key event.
 ## Luu y
 
 Day la controller phuc vu demo xu ly anh. Khong dam vao nguoi khac, giu khoang trong xung quanh khi choi.
+
+## Bo cuc cua so moi
+
+Khi chay `run_y8_controller.bat`, controller se tu dong chia man hinh:
+
+- Ben trai: Y8 mo bang **app window rieng**, khong co tab va thanh dia chi.
+- Ben phai: cua so webcam/debug nho gon.
+- Ty le mac dinh: game ~72% chieu rong man hinh, camera ~28%.
+
+Controller uu tien Microsoft Edge, sau do Google Chrome. Trinh duyet duoc mo voi che do `--app`, nen nhin nhu mot ung dung rieng thay vi mot tab trinh duyet.
+
+Neu muon game rong hon, sua trong `y8_controller.py`:
+
+```python
+GAME_SCREEN_RATIO = 0.72
+```
+
+Vi du:
+- `0.78`: game rong hon, camera hep hon.
+- `0.68`: camera rong hon.
