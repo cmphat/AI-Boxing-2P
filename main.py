@@ -190,18 +190,23 @@ def arrange_game_window(hwnd, screen_w, screen_h, panel_w=None):
 
 
 def launch_or_find_game(screen_w, screen_h, panel_w, callback):
-    """Launch Y8 automatically and resolve its HWND by browser PID, then title fallback."""
+    """Open the Y8 page in a dedicated full-screen browser and wait for its page title."""
     try:
         hwnd = find_game_window()
         if hwnd is None:
-            browser, kind = find_browser()
             profile = os.path.join(
                 os.environ.get("LOCALAPPDATA", str(ROOT)),
-                "AIBoxing_Y8_Profile_V3"
+                "AIBoxing_Y8_Profile_V4"
             )
             os.makedirs(profile, exist_ok=True)
 
-            if kind == "chromium":
+            try:
+                browser, kind = find_browser()
+            except Exception:
+                browser, kind = None, "default"
+
+            proc = None
+            if browser and kind == "chromium":
                 args = [
                     browser,
                     f"--user-data-dir={profile}",
@@ -213,43 +218,60 @@ def launch_or_find_game(screen_w, screen_h, panel_w, callback):
                     "--enable-webgl",
                     GAME_URL,
                 ]
-            else:
+                proc = subprocess.Popen(
+                    args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                    creationflags=getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0),
+                )
+            elif browser:
                 args = [browser, "-new-window", "-kiosk", GAME_URL]
+                proc = subprocess.Popen(
+                    args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                    creationflags=getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0),
+                )
+            else:
+                # Use the user's registered default browser if Edge/Chrome paths
+                # cannot be resolved from PATH or standard installation folders.
+                os.startfile(GAME_URL)
 
-            proc = subprocess.Popen(
-                args,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                creationflags=getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0),
-            )
-
-            deadline = time.time() + 35
+            deadline = time.time() + 55
+            fallback_hwnd = None
             while time.time() < deadline:
-                hwnd = find_window_for_pid(proc.pid) or find_game_window()
-                if hwnd:
+                titled = find_game_window()
+                if titled:
+                    hwnd = titled
                     break
-                time.sleep(0.20)
+                if proc is not None:
+                    candidate = find_window_for_pid(proc.pid)
+                    if candidate:
+                        fallback_hwnd = candidate
+                time.sleep(0.35)
 
             if hwnd is None:
+                hwnd = fallback_hwnd or find_game_window()
+
+            if hwnd is None:
+                # One final hand-off through Windows default browser.
                 try:
                     os.startfile(GAME_URL)
                 except Exception:
                     pass
-                fallback_deadline = time.time() + 15
+                fallback_deadline = time.time() + 20
                 while time.time() < fallback_deadline:
                     hwnd = find_game_window()
                     if hwnd:
                         break
-                    time.sleep(0.25)
+                    time.sleep(0.4)
 
-        if hwnd:
-            game_size = arrange_game_window(hwnd, screen_w, screen_h)
-            callback(hwnd, game_size, None)
+        if hwnd and USER32.IsWindow(hwnd):
+            arrange_game_window(hwnd, screen_w, screen_h)
+            USER32.ShowWindow(hwnd, 3)
+            USER32.BringWindowToTop(hwnd)
+            callback(hwnd, (screen_w, screen_h), None)
         else:
             callback(
                 None, None,
-                "Da goi trinh duyet nhung khong tim thay cua so game. "
-                "Hay kiem tra Edge/Chrome co mo duoc trang Y8 khong."
+                "Khong tim thay cua so Y8 sau khi mo trinh duyet. "
+                "Hay thu mo link Y8 bang Edge de kiem tra ket noi."
             )
     except Exception as exc:
         callback(None, None, f"{type(exc).__name__}: {exc}")
@@ -900,6 +922,10 @@ class CameraStream:
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
         self.cap.set(cv2.CAP_PROP_FPS, 20)
         self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+        try:
+            self.cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))
+        except Exception:
+            pass
 
         self.lock = threading.Lock()
         self.running = True
