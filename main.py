@@ -32,12 +32,13 @@ MODEL_PATH = ROOT / "assets" / "pose_landmarker_lite.task"
 GAME_URL = "https://www.y8.com/games/punch_boxing_championship"
 
 CAMERA_INDEX = 0
-CAMERA_CAPTURE_W = 640
-CAMERA_CAPTURE_H = 360
-POSE_TARGET_FPS = 24
+CAMERA_CAPTURE_W = 480
+CAMERA_CAPTURE_H = 270
+POSE_TARGET_FPS = 15
+PREVIEW_TARGET_FPS = 20
 
 PANEL_W = 390
-PANEL_H = 465
+PANEL_H = 450
 PREVIEW_W = 360
 PREVIEW_H = 203
 
@@ -204,15 +205,16 @@ def launch_or_find_game(screen_w, screen_h, panel_w, callback):
                 args = [
                     browser,
                     f"--user-data-dir={profile}",
-                    f"--app={GAME_URL}",
                     "--new-window",
-                    "--start-maximized",
+                    "--kiosk",
                     "--no-first-run",
                     "--disable-features=TranslateUI",
                     "--autoplay-policy=no-user-gesture-required",
+                    "--enable-webgl",
+                    GAME_URL,
                 ]
             else:
-                args = [browser, "-new-window", GAME_URL]
+                args = [browser, "-new-window", "-kiosk", GAME_URL]
 
             proc = subprocess.Popen(
                 args,
@@ -896,7 +898,7 @@ class CameraStream:
 
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
-        self.cap.set(cv2.CAP_PROP_FPS, 30)
+        self.cap.set(cv2.CAP_PROP_FPS, 20)
         self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
 
         self.lock = threading.Lock()
@@ -917,10 +919,9 @@ class CameraStream:
                 self.sequence += 1
 
     def get_latest(self):
+        # Reader replaces the frame object each capture; no full-frame copy is needed.
         with self.lock:
-            if self.frame is None:
-                return None, self.sequence
-            return self.frame.copy(), self.sequence
+            return self.frame, self.sequence
 
     def close(self):
         self.running = False
@@ -964,29 +965,32 @@ class BoxingApp:
         self.fps = 0.0
         self.last_frame_time = time.perf_counter()
         self.last_submit_time = 0.0
-
-        self._build_ui()
-        self.camera = self._open_camera()
-
-        self.pose_tracker = AsyncPoseTracker()
+        self.last_preview_time = 0.0
+        self.camera = None
+        self.pose_tracker = None
         self.gesture_engine = BoxingGestureEngine()
         self.keys = WindowsKeySender(self.is_game_focused)
 
-        self.hotkey_listener = pynput_keyboard.Listener(on_press=self._on_hotkey)
-        self.hotkey_listener.start()
-
+        self._build_ui()
         self.root.protocol("WM_DELETE_WINDOW", self.close)
 
+        # Launch Y8 independently: a webcam/model failure must not stop the game opening.
         threading.Thread(
             target=launch_or_find_game,
-            args=(
-                self.screen_w, self.screen_h, self.panel_w,
-                self._game_window_callback
-            ),
+            args=(self.screen_w, self.screen_h, self.panel_w, self._game_window_callback),
             daemon=True
         ).start()
 
-        self.root.after(20, self.update_frame)
+        try:
+            self.camera = self._open_camera()
+            self.pose_tracker = AsyncPoseTracker()
+            self.quality_label.config(text="CAMERA: READY - STAND IN FRAME", fg="#4ADE80")
+        except Exception as exc:
+            self.quality_label.config(text=f"CAMERA ERROR: {exc}", fg="#F87171")
+
+        self.hotkey_listener = pynput_keyboard.Listener(on_press=self._on_hotkey)
+        self.hotkey_listener.start()
+        self.root.after(25, self.update_frame)
 
     def _build_ui(self):
         header = tk.Frame(self.root, bg="#111827")
@@ -1265,14 +1269,18 @@ class BoxingApp:
             return
 
         now = time.perf_counter()
+        if self.camera is None or self.pose_tracker is None:
+            self.root.after(100, self.update_frame)
+            return
+
         frame, frame_seq = self.camera.get_latest()
 
         if frame is not None and frame_seq != self.last_frame_seq:
             self.last_frame_seq = frame_seq
 
-            # Inference receives the 640x360 camera frame; preview is scaled separately.
-            rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            # Capped inference prevents a backlog of stale frames and reduces CPU load.
             if now - self.last_submit_time >= 1.0 / POSE_TARGET_FPS:
+                rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 self.pose_tracker.submit(rgb)
                 self.last_submit_time = now
 
@@ -1301,18 +1309,21 @@ class BoxingApp:
             instant_fps = 1.0 / dt
             self.fps = instant_fps if self.fps == 0 else 0.85 * self.fps + 0.15 * instant_fps
 
-            preview = cv2.resize(
-                frame, (PREVIEW_W, PREVIEW_H), interpolation=cv2.INTER_AREA
-            )
-            preview = cv2.flip(preview, 1)
-            if self.latest_norm is not None:
-                self._draw_skeleton(preview, self.latest_norm)
-            self._draw_overlay(preview, self.latest_state)
+            # Limit UI painting to 20 FPS; inference and keyboard events are independent.
+            if now - self.last_preview_time >= 1.0 / PREVIEW_TARGET_FPS:
+                preview = cv2.resize(
+                    frame, (PREVIEW_W, PREVIEW_H), interpolation=cv2.INTER_LINEAR
+                )
+                preview = cv2.flip(preview, 1)
+                if self.latest_norm is not None:
+                    self._draw_skeleton(preview, self.latest_norm)
+                self._draw_overlay(preview, self.latest_state)
 
-            rgb_preview = cv2.cvtColor(preview, cv2.COLOR_BGR2RGB)
-            photo = ImageTk.PhotoImage(image=Image.fromarray(rgb_preview))
-            self.image_label.configure(image=photo, width=PREVIEW_W, height=PREVIEW_H)
-            self.image_label.image = photo
+                rgb_preview = cv2.cvtColor(preview, cv2.COLOR_BGR2RGB)
+                photo = ImageTk.PhotoImage(image=Image.fromarray(rgb_preview))
+                self.image_label.configure(image=photo, width=PREVIEW_W, height=PREVIEW_H)
+                self.image_label.image = photo
+                self.last_preview_time = now
 
             quality = self.latest_state.get("quality", "WAITING FOR POSE")
             self.quality_label.config(
@@ -1369,12 +1380,14 @@ class BoxingApp:
             pass
 
         try:
-            self.pose_tracker.close()
+            if self.pose_tracker is not None:
+                self.pose_tracker.close()
         except Exception:
             pass
 
         try:
-            self.camera.close()
+            if self.camera is not None:
+                self.camera.close()
         except Exception:
             pass
 
