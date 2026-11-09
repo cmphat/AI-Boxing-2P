@@ -16,6 +16,7 @@ from ctypes import wintypes
 import ctypes
 USER32 = ctypes.WinDLL("user32", use_last_error=True)
 import cv2
+cv2.setNumThreads(1)
 import mediapipe as mp
 from mediapipe.tasks import python as mp_python
 from mediapipe.tasks.python import vision
@@ -562,7 +563,7 @@ def select_primary_pose(poses, previous_center=None):
 class OneEuroFilter:
     """Adaptive low-pass filter: smooths idle landmarks but reacts faster to punches."""
 
-    def __init__(self, min_cutoff=3.2, beta=0.38, derivative_cutoff=1.2):
+    def __init__(self, min_cutoff=6.0, beta=0.75, derivative_cutoff=1.5):
         self.min_cutoff = min_cutoff
         self.beta = beta
         self.derivative_cutoff = derivative_cutoff
